@@ -1,2 +1,3 @@
-import util
+import calculate
 import main
+import parallel
