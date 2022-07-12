@@ -1,7 +1,14 @@
+import logging
+
+from typing import List, Tuple, Union
+
 import numpy as np
 import scipy.stats
 
 from calibrationtools.calculate import min_mass_containing_location
+from calibrationtools.smoothing import SMOOTHING_FUNCTIONS
+
+logger = logging.getLogger(__name__)
 
 def calibration_step(
     model_output,
@@ -125,3 +132,44 @@ def calibration_from_steps(cal_step_bulk: np.array):
     signed_err = residuals.sum(axis=1)
     return calibration_curves, abs_err, signed_err
 
+
+def calibration_step_with_smoothing(
+    model_output: np.ndarray,
+    true_location: np.ndarray,
+    arena_dims: Union[Tuple[float, float], np.ndarray],
+    smoothing_methods: Union[str, List[str]],
+    min_std: float,
+    max_std: float,
+    num_std_steps: int,
+    n_calibration_bins: int = 10,
+):
+    """
+    Apply the provided smoothing methods to `model_output` before calculating
+    one calibration step using `calibration_step`.
+    """
+    output = {}
+    for method in smoothing_methods:
+        try:
+            smoothing_fn = SMOOTHING_FUNCTIONS[method]
+        except KeyError as e:
+            err_msg = f'Smoothing method {method} unrecognized. ' \
+                'Allowed options: {SMOOTHING_FUNCTIONS.keys()}'
+            logger.error(err_msg)
+            raise KeyError(err_msg) from e
+        std_values = np.linspace(min_std, max_std, num_std_steps)
+
+        smoothed_output = smoothing_fn(
+            model_output=model_output,
+            std_values=std_values,
+            arena_dims=arena_dims
+        )
+
+        bin_idxs = calibration_step(
+            smoothed_output,
+            true_location,
+            arena_dims,
+            n_calibration_bins=n_calibration_bins,
+        )
+
+        output[method] = bin_idxs
+    return output
