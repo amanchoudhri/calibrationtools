@@ -1,6 +1,6 @@
 import logging
 
-from typing import List, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 import numpy as np
 import scipy.stats
@@ -137,7 +137,7 @@ def calibration_step_with_smoothing(
     model_output: np.ndarray,
     true_location: np.ndarray,
     arena_dims: Union[Tuple[float, float], np.ndarray],
-    smoothing_methods: Union[str, List[str]],
+    smoothing_method: Union[str, Callable],
     min_std: float,
     max_std: float,
     num_std_steps: int,
@@ -147,29 +147,42 @@ def calibration_step_with_smoothing(
     Apply the provided smoothing methods to `model_output` before calculating
     one calibration step using `calibration_step`.
     """
-    output = {}
-    for method in smoothing_methods:
+    allowed_strs = list(SMOOTHING_FUNCTIONS.keys())
+    # if smoothing method is a string, it should refer to
+    # one of the predefined smoothing functions in
+    # smoothing.py
+    if type(smoothing_method) == str:
         try:
-            smoothing_fn = SMOOTHING_FUNCTIONS[method]
+            smoothing_fn = SMOOTHING_FUNCTIONS[smoothing_method]
         except KeyError as e:
-            err_msg = f'Smoothing method {method} unrecognized. ' \
-                'Allowed options: {SMOOTHING_FUNCTIONS.keys()}'
+            err_msg = f'Smoothing method {smoothing_method} unrecognized. ' \
+                f'Allowed options: {allowed_strs}'
             logger.error(err_msg)
             raise KeyError(err_msg) from e
-        std_values = np.linspace(min_std, max_std, num_std_steps)
+    # allow the user to pass in their own smoothing_method
+    # (good for development)
+    elif callable(smoothing_method):
+        smoothing_fn = smoothing_method
+    # if it's neither a string nor a function, throw an error
+    else:
+        raise ValueError(
+            f'Expected smoothing_method to be either a function or a string ' \
+            f'in {allowed_strs}. Instead, recieved: {type(smoothing_method)}.'
+            )
 
-        smoothed_output = smoothing_fn(
-            model_output=model_output,
-            std_values=std_values,
-            arena_dims=arena_dims
-        )
+    std_values = np.linspace(min_std, max_std, num_std_steps)
 
-        bin_idxs = calibration_step(
-            smoothed_output,
-            true_location,
-            arena_dims,
-            n_calibration_bins=n_calibration_bins,
-        )
+    smoothed_output = smoothing_fn(
+        model_output=model_output,
+        std_values=std_values,
+        arena_dims=arena_dims
+    )
 
-        output[method] = bin_idxs
-    return output
+    bin_idxs = calibration_step(
+        smoothed_output,
+        true_location,
+        arena_dims,
+        n_calibration_bins=n_calibration_bins,
+    )
+
+    return bin_idxs
