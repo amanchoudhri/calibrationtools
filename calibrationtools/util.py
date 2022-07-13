@@ -1,6 +1,6 @@
 import logging
 
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 
@@ -8,17 +8,26 @@ logger = logging.getLogger(__name__)
 
 def make_xy_grids(
     arena_dims: Union[Tuple[float, float], np.ndarray],
-    desired_resolution: float
+    resolution: Optional[float] = None,
+    shape: Optional[Tuple[float, float]] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Given a two-tuple or np array storing the x and y dimensions and a desired
     grid resolution, return a tuple of arrays stooring the x and y coordinates
     at every point in the arena spaced apart by `desired_resolution`. 
     """
-    # define a helper to return a 1d array of points corresponding to the
-    # interval steps in a coordinate direction
-    get_coord_arrays = lambda dim: np.linspace(0, dim, int(dim / desired_resolution))
-    xs, ys = map(get_coord_arrays, arena_dims)
+    if not (resolution or shape):
+        raise ValueError('One of `resolution`, `shape` is required!')
+
+    if not resolution:
+        pts_per_dim = np.array(shape)
+    else:
+        logger.debug(f'resolution: {resolution} | arena_dims: {arena_dims}')
+        pts_per_dim = (np.array(arena_dims) / resolution).astype(int)
+        logger.debug(f'pts_per_dim: {pts_per_dim}')
+
+    get_coord_arrays = lambda dim_pts: np.linspace(0, dim_pts[0], dim_pts[1])
+    xs, ys = map(get_coord_arrays, zip(arena_dims, pts_per_dim))
     xgrid, ygrid = np.meshgrid(xs, ys)
     return (xgrid, ygrid)
 
