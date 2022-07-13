@@ -1,9 +1,11 @@
+import logging
 import multiprocessing as mp
 
 from typing import Tuple
 
 import numpy as np
 
+logger = logging.getLogger(__name__)
 
 def assign_to_bin_2d(locations, xgrid, ygrid):
     """
