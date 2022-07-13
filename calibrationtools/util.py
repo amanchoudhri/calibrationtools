@@ -22,9 +22,7 @@ def make_xy_grids(
     if not resolution:
         pts_per_dim = np.array(shape)
     else:
-        logger.debug(f'resolution: {resolution} | arena_dims: {arena_dims}')
         pts_per_dim = (np.array(arena_dims) / resolution).astype(int)
-        logger.debug(f'pts_per_dim: {pts_per_dim}')
 
     get_coord_arrays = lambda dim_pts: np.linspace(0, dim_pts[0], dim_pts[1])
     xs, ys = map(get_coord_arrays, zip(arena_dims, pts_per_dim))
