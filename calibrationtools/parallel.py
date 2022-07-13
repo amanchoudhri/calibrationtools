@@ -19,7 +19,8 @@ def _calibration_step(
     grid_resolution: float = 0.5,
     ) -> np.ndarray:
     """
-
+    Actual calibration step calculation function. See `calibration_step`
+    for more details.
     """
     # get our x and ygrids
     xgrid, ygrid = make_xy_grids(arena_dims, grid_resolution)
