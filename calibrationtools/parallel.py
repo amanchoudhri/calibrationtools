@@ -14,19 +14,23 @@ def _calibration_step(
     pmfs,
     true_location,
     arena_dims,
-    std_values,
-    n_calibration_bins: int = 10,
-    grid_resolution: float = 0.5,
+    n_calibration_bins: int = 10
     ) -> np.ndarray:
     """
     Actual calibration step calculation function. See `calibration_step`
     for more details.
     """
-    # get our x and ygrids
-    xgrid, ygrid = make_xy_grids(arena_dims, grid_resolution)
+    # get our x and ygrids to match the shape of each pmf
+    xgrid, ygrid = make_xy_grids(arena_dims, shape=pmfs.shape[1:])
+
+    # reshape location to (1, 2) if necessary
+    # we do this so the repeat function works out correctly
+    if true_location.shape != (1, 2):
+        logger.debug('Param `true_location` is not of expected shape, (2,1). Attempting to reshape...')
+        true_location = true_location.reshape((1, 2))
 
     # repeat location so we can use the vectorized min_mass_containing_location fn
-    true_loc_repeated = true_location.repeat(len(std_values), axis=0)
+    true_loc_repeated = true_location.repeat(len(pmfs), axis=0)
 
     # perform the calibration calculation step
     m_vals = min_mass_containing_location(
@@ -151,7 +155,7 @@ def calibration_step(
 
     if smoothing_method:
         pmfs = smoothing_fn(
-            model_output=pmfs,
+            model_output=model_output,
             std_values=sigma_values,
             arena_dims=arena_dims
         )
