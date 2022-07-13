@@ -17,7 +17,7 @@ def gaussian_mixture(
     model_output: np.ndarray,
     std_values: np.ndarray,
     arena_dims: Union[Tuple[float, float], np.ndarray],
-    desired_resolution = 0.5,
+    desired_resolution = 0.005,
     **kwargs
     ):
     for kwarg, value in kwargs.items():
@@ -30,7 +30,7 @@ def gaussian_mixture(
             )
     
     # create grid of points at which to evaluate the pdfs we define
-    xgrid, ygrid = make_xy_grids(arena_dims, desired_resolution)
+    xgrid, ygrid = make_xy_grids(arena_dims, resolution=desired_resolution)
     coord_grid = np.dstack((xgrid, ygrid))
 
     # now assemble an array of probability mass functions by smoothing
@@ -72,29 +72,30 @@ def gaussian_blur(
     # if the provided standard deviation values don't include 0 (no smoothing),
     # add it to the list. this is crude but it allows us to use one `std_values`
     # array for both smoothing methods.
-    if 0 not in std_values:
-        std_values = np.insert(std_values, 0)
+    # if 0 not in std_values:
+    #     std_values = np.insert(std_values, 0, 0)
 
     # renormalize the grids so each entry is in the range [-1, 1],
     # since MUSE RSRP values seem to be able to reach magnitudes like 1e13,
     # which the exp function inside softmax just blows up to infinity.
     if renormalize:
-        output_grids /= output_grids.max(axis=(1, 2))[:, None, None]
+        model_output /= model_output.max(axis=(1, 2))[:, None, None]
 
-    blurred = np.zeros(len(std_values), *output_grids.shape)
+    # softmax the grids
+    axes_to_sum_over = range(2, model_output.ndim)  # sum over every axis but the first two
+    sum_per_grid = np.exp(model_output).sum(axis=tuple(axes_to_sum_over))    
+    softmaxed = np.exp(model_output) / sum_per_grid[:, :, None]
+
+    blurred = np.zeros((len(std_values), *softmaxed.shape))
 
     for i, std in enumerate(std_values):
         blurred[i] = scipy.ndimage.gaussian_filter(
-            output_grids,
+            softmaxed,
             sigma=[0, std, std]  # blur only within grids, not between them
         )
 
-    # softmax the blurred grids
-    axes_to_sum_over = range(2, blurred.ndim)  # sum over every axis but the first two
-    softmaxed = np.exp(blurred) / np.exp(blurred).sum(axis=axes_to_sum_over)
-
     # and finally average the grids for each sample
-    return softmaxed.mean(axis=1)
+    return blurred.mean(axis=1)
 
 SMOOTHING_FUNCTIONS = {
     'gaussian_mixture': gaussian_mixture,
