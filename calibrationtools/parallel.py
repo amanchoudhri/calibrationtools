@@ -26,7 +26,6 @@ def _calibration_step(
     # reshape location to (1, 2) if necessary
     # we do this so the repeat function works out correctly
     if true_location.shape != (1, 2):
-        logger.debug('Param `true_location` is not of expected shape, (2,1). Attempting to reshape...')
         true_location = true_location.reshape((1, 2))
 
     # repeat location so we can use the vectorized min_mass_containing_location fn
