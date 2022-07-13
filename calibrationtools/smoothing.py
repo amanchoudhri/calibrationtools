@@ -1,12 +1,12 @@
 import logging
 
-from typing import Iterable, Tuple, Union
+from typing import Tuple, Union
 
 import numpy as np
 import scipy.stats
 import scipy.ndimage
 
-from util import make_xy_grids
+from calibrationtools.util import make_xy_grids
 
 logger = logging.getLogger(__name__)
 

@@ -1,10 +1,6 @@
-import multiprocessing as mp
-
 from typing import Tuple
 
 import numpy as np
-
-from matplotlib import pyplot as plt
 
 from calibrationtools.calculate import (
     min_mass_containing_location,

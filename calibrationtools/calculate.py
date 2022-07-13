@@ -4,8 +4,6 @@ from typing import Tuple
 
 import numpy as np
 
-from matplotlib import pyplot as plt
-
 
 def assign_to_bin_2d(locations, xgrid, ygrid):
     """
