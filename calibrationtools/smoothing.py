@@ -6,6 +6,7 @@ import numpy as np
 import scipy.stats
 import scipy.ndimage
 
+from util import make_xy_grids
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,7 @@ def gaussian_mixture(
             )
     
     # create grid of points at which to evaluate the pdfs we define
-    coord_arrs = lambda dim: np.linspace(0, dim, int(dim / desired_resolution))
-    xs, ys = map(coord_arrs, arena_dims)
-    xgrid, ygrid = np.meshgrid(xs, ys)
+    xgrid, ygrid = make_xy_grids(arena_dims, desired_resolution)
     coord_grid = np.dstack((xgrid, ygrid))
 
     # now assemble an array of probability mass functions by smoothing
