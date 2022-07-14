@@ -1,3 +1,4 @@
+import functools
 import logging
 
 from typing import Tuple, Union
@@ -6,7 +7,7 @@ import numpy as np
 import scipy.stats
 import scipy.ndimage
 
-from calibrationtools.util import make_xy_grids
+from calibrationtools.util import check_valid_pmfs, make_xy_grids
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,37 @@ def gaussian_blur(
     # and finally average the grids for each sample
     return blurred.mean(axis=1)
 
+def no_smoothing(model_output):
+    """
+    Apply no smoothing to the output. Here for consistency and to ensure
+    that model_output can be interpreted as pmfs.
+    """
+    err_prefix = (
+        f'Expected output to be a valid probability '
+        f'mass function since no smoothing method was provided to '
+        f'the CalibrationAccumulator constructor.'
+        )
+    check_valid_pmfs(model_output, prefix_str=err_prefix)
+    return model_output
+
+
 SMOOTHING_FUNCTIONS = {
     'gaussian_mixture': gaussian_mixture,
     'gaussian_blur': gaussian_blur,
+    'no_smoothing': no_smoothing,
+}
+
+# names of the necessary arguments for the smoothing functions
+# used by CalibrationAccumulator
+# to check whether the correct params have been passed for
+# a desired smoothing function
+NECCESARY_KWARGS = {
+    'gaussian_mixture': ['std_values', 'desired_resolution', 'arena_dims'],
+    'gaussian_blur': ['std_values']
+}
+
+N_CURVES_PER_FN = {
+    'gaussian_mixture': 'std_values',
+    'gaussian_blur': 'std_values',
+    'no_smoothing': 1
 }
