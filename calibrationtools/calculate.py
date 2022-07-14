@@ -29,11 +29,11 @@ def assign_to_bin_2d(locations, xgrid, ygrid):
     # note: subtract one to ignore leftmost bin (0)
     x_idxs = np.digitize(x_coords, x_bins) - 1
     y_idxs = np.digitize(y_coords, y_bins) - 1
-    # NOTE: we expect model output to have shape (NUM_SAMPLES, n_x_pts, n_y_pts)
+    # NOTE: we expect model output to have shape (NUM_SAMPLES, n_y_pts, n_x_pts)
     # so when we flatten, the entry at coordinate (i, j) gets mapped to
-    # (n_y_pts * i) + j
+    # (n_y_pts * j) + i
     n_y_pts = len(y_bins)
-    return (n_y_pts * x_idxs) + y_idxs
+    return (n_y_pts * y_idxs) + x_idxs
 
 
 def min_mass_containing_location(
@@ -42,10 +42,21 @@ def min_mass_containing_location(
     xgrid: np.ndarray,
     ygrid: np.ndarray
     ):
-    # maps: (NUM_SAMPLES, n_x_pts, n_y_pts)
+    # maps: (NUM_SAMPLES, n_y_bins, n_x_bins)
     # locations: (NUM_SAMPLES, 2)
-    # coord_bins: (n_y_pts, n_x_pts, 2)  ( output of meshgrid then dstack ) 
+    # coord_bins: (n_y_bins + 1, n_x_bins + 1, 2)  ( output of meshgrid then dstack ) 
     # reshape maps to (NUM_SAMPLES, N_BINS)
+    n_y_bins, n_x_bins = maps.shape[1:]
+    # there should be one more edge in each direction than
+    # the number of bins
+    expected_grid_shape = (n_y_bins + 1, n_x_bins + 1)
+    if xgrid.shape != expected_grid_shape or ygrid.shape != expected_grid_shape:
+        raise ValueError(
+            f'Expected `xgrid` and `ygrid` to have shape {expected_grid_shape}, '
+            f'since each pmf has shape {maps.shape[1:]}. '
+            f'Instead, encountered `xgrid` shape {xgrid.shape} and '
+            f'`ygrid` shape {ygrid.shape}'
+            )
     num_samples = maps.shape[0]
     flattened_maps = maps.reshape((num_samples, -1))
     idx_matrix = flattened_maps.argsort(axis=1)[:, ::-1]
