@@ -7,6 +7,50 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+def digitize(locations, bin_edges):
+    """
+    Wrapper for np.digitize where an error is raised if a value far
+    outside the given range is encountered. NOTE: We assume that the
+    bins are given in increasing order.
+    """
+    # check that the bins are in increasing order
+    diffs = np.diff(bin_edges)
+    if (diffs <= 0).any():
+        raise ValueError('Expected array `bins` to be in increasing order.')
+    # get max distance between bins
+    max_dx = diffs.max()
+    # define a new bin array where the highest bin
+    # is bins[-1] + tol, with our tolerance as
+    # 0.01 * max_dx. 
+    # say values less than this are in the highest bin.
+    # this is to catch floating point errors that push values
+    # greater than bin_edges[-1], while still
+    # letting us catch extreme values that are way too high.
+    tol = 0.01 * max_dx
+    extended_bins = np.append(bin_edges, bin_edges[-1] + tol)
+    # digitize locations using these new bins, removing the
+    # leftmost bin edge to avoid off-by-one errors.
+    edges_to_use = extended_bins[1:]
+    bin_idxs = np.digitize(locations, edges_to_use)
+    # if any value was greater than bins[-1] + max_dx,
+    # raise a value error.
+    if (bin_idxs == len(edges_to_use)).any():
+        positions = bin_idxs == len(edges_to_use)
+        values = locations[positions]
+        err_display = [
+            f'idx: {p} | value: {v}' for (p, v) in zip(positions, values)
+            ]
+        raise ValueError(
+            f'Encountered value far greater than the largest bin edge! '
+            f'Largest bin edge: {bin_edges[-1]}; Invalid values and their '
+            f'positions: {err_display}'
+            )
+    # if not, say that the values were sufficiently close to the bin edges
+    # and clip them to match the number of bins
+    num_bins = len(bin_edges) - 1
+    highest_bin_idx = num_bins - 1
+    return bin_idxs.clip(0, highest_bin_idx)
+
 def assign_to_bin_2d(locations, xgrid, ygrid):
     """
     Return an array of indices of the 2d bins to which each input in
@@ -69,7 +113,7 @@ def min_mass_containing_location(
     # [0, 1, 2, 3, ...],
     # [0, 1, 2, 3, ...]
     # ]
-    num_bins = xgrid.shape[0] * xgrid.shape[1]
+    num_bins = n_y_bins * n_x_bins
     x_idx = np.arange(num_bins)[np.newaxis, :].repeat(num_samples, axis=0)
     condition = x_idx > bin_idxs[:, np.newaxis]
     sorted_maps = np.take_along_axis(flattened_maps, idx_matrix, axis=1)

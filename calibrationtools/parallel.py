@@ -8,7 +8,7 @@ from typing import Any, Callable, Mapping, Optional, Tuple, Union
 import h5py
 import numpy as np
 
-from calibrationtools.calculate import min_mass_containing_location
+from calibrationtools.calculate import digitize, min_mass_containing_location
 from calibrationtools.smoothing import SMOOTHING_FUNCTIONS, NECCESARY_KWARGS, N_CURVES_PER_FN
 from calibrationtools.util import check_valid_pmfs, make_xy_grids
 
@@ -202,7 +202,9 @@ class CalibrationAccumulator:
                 result_subdict['curves'] = curves
                 result_subdict['abs_err'] = abs_err 
                 result_subdict['signed_err'] = signed_err 
+
         logger.info('Successfully calculated results.')
+
         if h5_file:
             logger.info(f'Writing results to h5 file {h5_file}.')
             cal_grp = h5_file.create_group('calibration')
@@ -226,8 +228,11 @@ def _calibration_step(
     Actual calibration step calculation function. See `calibration_step`
     for more details.
     """
-    # get our x and ygrids to match the shape of each pmf
-    xgrid, ygrid = make_xy_grids(arena_dims, shape=pmfs.shape[1:])
+    # get our x and ygrids to match the shape of the pmfs
+    # since the grids track the edge points, we should have
+    # one more point in each coordinate direction.
+    grid_shape = np.array(pmfs.shape[1:]) + 1
+    xgrid, ygrid = make_xy_grids(arena_dims, shape=grid_shape)
 
     # reshape location to (1, 2) if necessary
     # we do this so the repeat function works out correctly
@@ -247,9 +252,8 @@ def _calibration_step(
 
     # transform to the bin in [0, 1] to which each value corresponds,
     # essentially iteratively building a histogram with each step
-    bins = np.linspace(0, 1, n_calibration_bins)
-    # subtract one to track the left hand side of the bin
-    bin_idxs = np.digitize(m_vals, bins) - 1
+    bins = np.arange(n_calibration_bins + 1) / n_calibration_bins
+    bin_idxs = digitize(m_vals, bins)
 
     return bin_idxs
 
