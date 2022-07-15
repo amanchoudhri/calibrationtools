@@ -16,7 +16,7 @@ def make_xy_grids(
     grid resolution, return a tuple of arrays stooring the x and y coordinates
     at every point in the arena spaced apart by `desired_resolution`. 
     """
-    if not (resolution or shape):
+    if resolution is None and shape is None:
         raise ValueError('One of `resolution`, `shape` is required!')
 
     if not resolution:
@@ -40,11 +40,11 @@ def check_valid_pmfs(pmfs: np.ndarray, prefix_str=None):
     Will log a warning if this expected convention appears to be violated.
     """
     if not prefix_str:
-        prefix_str = 'Expected pmfs to be an array of valid probability mass functions. '
+        prefix_str = 'Expected pmfs to be an array of valid probability mass functions.'
     # make sure that the pmfs have the correct shape. i.e., the arr should have
     # three dimensions of the form (n_estimates, n_x_pts, n_y_pts)
     if pmfs.ndim != 3:
-        raise ValueError(prefix_str + f'Instead, found shape: {pmfs.shape}.')
+        raise ValueError(prefix_str + f' Instead, found shape: {pmfs.shape}.')
     # add log msg if the number of estimates (pmfs.shape[0]) is greater than
     # the number of gridpoints in either direction (max(pmfs.shape[1:]))
     if pmfs.shape[0] > max(pmfs.shape[1:]):
