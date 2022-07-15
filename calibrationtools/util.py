@@ -35,8 +35,8 @@ def check_valid_pmfs(pmfs: np.ndarray, prefix_str=None):
 
     Expect the axes of `pmfs` to be ordered as follows:
         dimension 0: the number of estimates
-        dimension 1: the number of gridpoints in the x direction
-        dimension 2: the number of gridpoints in the y direction
+        dimension 1: the number of gridpoints in the y direction
+        dimension 2: the number of gridpoints in the x direction
     Will log a warning if this expected convention appears to be violated.
     """
     if not prefix_str:
@@ -44,7 +44,14 @@ def check_valid_pmfs(pmfs: np.ndarray, prefix_str=None):
     # make sure that the pmfs have the correct shape. i.e., the arr should have
     # three dimensions of the form (n_estimates, n_x_pts, n_y_pts)
     if pmfs.ndim != 3:
-        raise ValueError(prefix_str + f' Instead, found shape: {pmfs.shape}.')
+        raise ValueError(
+            prefix_str +
+            f' Specifically, the pmfs array should be 3-dimensional, with ' \
+            f'dim 0 as the number of estimates per sample, dim 1 as ' \
+            f'the number of gridpoints in the y direction, and dim 2 ' \
+            f'as the number of gridpoints in the x direction. ' \
+            f'Instead, found shape: {pmfs.shape}.'
+            )
     # add log msg if the number of estimates (pmfs.shape[0]) is greater than
     # the number of gridpoints in either direction (max(pmfs.shape[1:]))
     if pmfs.shape[0] > max(pmfs.shape[1:]):
@@ -59,7 +66,7 @@ def check_valid_pmfs(pmfs: np.ndarray, prefix_str=None):
     if not distrs_sum_to_one.all():
         distrs_not_sum_to_one = (~distrs_sum_to_one).nonzero()
         raise ValueError(
-            prefix_str + f'However, the following distributions do not sum ' \
+            prefix_str + f' However, the following distributions do not sum ' \
             f'to 1: {distrs_not_sum_to_one}'
         )
     elems_positive = pmfs >= 0 
@@ -67,6 +74,6 @@ def check_valid_pmfs(pmfs: np.ndarray, prefix_str=None):
         negative_idxs = np.argwhere(~elems_positive)
         negative_idxs = [tuple(idxs) for idxs in negative_idxs]
         raise ValueError(
-            prefix_str + f'However, elements at the following indices were ' \
+            prefix_str + f' However, elements at the following indices were ' \
             f'negative: {negative_idxs}'
         )
