@@ -36,7 +36,10 @@ def gaussian_mixture(
 
     # now assemble an array of probability mass functions by smoothing
     # the location estimates with each std value
-    pmfs = np.zeros((len(std_values), *xgrid.shape))
+    # since grids track the edgepoints and pmfs tracks the bins,
+    # pmfs should have one less value in each coordinate direction
+    pmf_shape = np.array(xgrid.shape) - 1
+    pmfs = np.zeros((len(std_values), *pmf_shape))
 
     for i, std in enumerate(std_values):
         for loc_estimate in model_output:
