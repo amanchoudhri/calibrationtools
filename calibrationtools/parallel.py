@@ -57,24 +57,39 @@ class CalibrationAccumulator:
         self.mass_counts = defaultdict(dict)
 
         for output_type, smoothing_spec in smoothing_specs_for_outputs.items():
+            # if the smoothing_spec dict is empty, assume the user
+            # meant to apply no smoothing.
+            if not smoothing_spec:
+                smoothing_spec['no_smoothing'] = {}
+
             for smoothing_method, params in smoothing_spec.items():
+                # preload arena_dims into params so the user
+                # doesn't have to pass it twice
+                params['arena_dims'] = self.arena_dims
                 # TODO: validate smoothing_method
-                # if the user selected a predefined smoothing method but
-                # didn't pass the necessary kwargs for the function (like std_values),
-                # throw an error
-                all_kwargs_present = all(
-                    kwarg in params for kwarg in NECCESARY_KWARGS[smoothing_method]
-                    )
-                if type(smoothing_method) == str and not all_kwargs_present:
-                    raise ValueError((
-                        'Invalid smoothing params passed for method '
-                        f'{smoothing_method}! Expected param dictionary '
-                        f'to contain keys: {NECCESARY_KWARGS[smoothing_method]}. '
-                        f'Instead found keys: {params.keys()}'
-                        ))
-                # next allocate the correct amount of space for the smoothing method
-                # if it's a string
                 if type(smoothing_method) == str:
+                    # check that the smoothing method is valid
+                    if smoothing_method not in SMOOTHING_FUNCTIONS:
+                        raise KeyError(
+                            f'Invalid smoothing string \'{smoothing_method}\''
+                            f'recieved! Valid options are: '
+                            f'{SMOOTHING_FUNCTIONS.keys()}.'
+                        )
+                    # if the user selected a predefined smoothing method but
+                    # didn't pass the necessary kwargs for the function
+                    # (like std_values), throw an error
+                    all_kwargs_present = all(
+                        kwarg in params for kwarg in NECCESARY_KWARGS[smoothing_method]
+                        )
+                    if not all_kwargs_present:
+                        raise ValueError((
+                            'Invalid smoothing params passed for method '
+                            f'{smoothing_method}! Expected param dictionary '
+                            f'to contain keys: {NECCESARY_KWARGS[smoothing_method]}. '
+                            f'Instead found keys: {params.keys()}'
+                            ))
+                    # if all necessary args were provided, allocate the correct
+                    # amount of space for the smoothing method
                     n_curves = N_CURVES_PER_FN[smoothing_method]
                     # if the entry in N_CURVES_PER_FN is a string, it means
                     # look to the length of that keyword argument in the param
@@ -84,10 +99,15 @@ class CalibrationAccumulator:
                     # otherwise, it's an integer representing how many curves
                     # per sample are returned and we can continue.
                     mass_counts_arr = np.zeros((n_curves, n_calibration_bins))
-                # if the user passes in a custom function, have them pass in
-                # how many calibration curves their function will create
-                # per sample
+
                 elif callable(smoothing_method):
+                    logger.debug(
+                        f'smoothing method {smoothing_method} recieved '
+                        f'with params {params}'
+                        )
+                    # if the user passes in a custom function, have them
+                    # pass in how many calibration curves their function
+                    # will create per sample
                     if 'n_curves_per_sample' not in params:
                         raise ValueError(
                             f'Parameter dictionary for custom smoothing method ' \
@@ -140,12 +160,6 @@ class CalibrationAccumulator:
                 if type(smoothing_method) == str:
                     smoothing_fn = SMOOTHING_FUNCTIONS[smoothing_method]
                     smoothing_fn = functools.partial(smoothing_fn, **params)
-                    # extra check to see if the arena dims are a necessary param
-                    # for the smoothing function
-                    if 'arena_dims' in NECCESARY_KWARGS[smoothing_method]:
-                        smoothing_fn = functools.partial(
-                            smoothing_fn, arena_dims=self.arena_dims
-                            )
 
                 def _update_mass_counts(bin_idxs):
                     """
@@ -177,7 +191,7 @@ class CalibrationAccumulator:
                         self.arena_dims,
                         n_calibration_bins=self.n_calibration_bins,
                     )
-                    _update_mass_counts(output_name, smoothing_method, bin_idxs)
+                    _update_mass_counts(bin_idxs)
 
     def calculate_curves_and_error(self, h5_file: Optional[h5py.File] = None):
         """
