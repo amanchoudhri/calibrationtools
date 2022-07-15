@@ -106,7 +106,7 @@ def min_mass_containing_location(
     # coord_bins: (n_y_bins + 1, n_x_bins + 1, 2)  ( output of meshgrid then dstack ) 
     n_y_bins, n_x_bins = maps.shape[1:]
     # first verify that xgrid and ygrid have correct shapes
-    _check_grid_shape(maps[1:], xgrid, ygrid)
+    _check_grid_shape(maps.shape[1:], xgrid, ygrid)
     # reshape maps to (NUM_SAMPLES, N_BINS)
     num_samples = maps.shape[0]
     flattened_maps = maps.reshape((num_samples, -1))
