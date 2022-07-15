@@ -125,7 +125,9 @@ def min_mass_containing_location(
     condition = x_idx > bin_idxs[:, np.newaxis]
     sorted_maps = np.take_along_axis(flattened_maps, idx_matrix, axis=1)
     s = np.where(condition, 0, sorted_maps).sum(axis=1)
-    return s
+    # clip values to remove any floating point errors
+    # where the sum is greater than 1
+    return s.clip(0, 1)
 
 
 def min_mass_containing_location_single(pmf, loc, xgrid, ygrid):
@@ -154,7 +156,9 @@ def min_mass_containing_location_single(pmf, loc, xgrid, ygrid):
     num_bins = pmf.size
     sorted_maps = flattened[argsorted]
     s = np.where(np.arange(num_bins) > bin_idx, 0, sorted_maps).sum()
-    return s
+    # clip values to remove any floating point errors
+    # where the sum is greater than 1
+    return s.clip(0, 1)
 
 
 def min_mass_containing_location_mp(
