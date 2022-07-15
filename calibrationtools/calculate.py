@@ -57,8 +57,9 @@ def assign_to_bin_2d(locations, xgrid, ygrid):
     `locations` corresponds.
     
     The indices correspond to the "flattened" version of the grid. In essence,
-    for a point in bin (i, j), the output is i * n_y_pts + j, where n_y_pts
-    is the number of gridpoints in the y direction.
+    for a point in bin (i, j), the output is i + (n_x_bins * j), where n_x_bins
+    is the number of grid bins in the x direction--essentially the number
+    of gridpoints in that direction - 1.
     """
     # locations: (NUM_SAMPLES, 2)
     # xgrid: (n_y_pts, n_x_pts)
@@ -66,17 +67,18 @@ def assign_to_bin_2d(locations, xgrid, ygrid):
     x_coords = locations[:, 0]
     y_coords = locations[:, 1]
     # 1d array of numbers representing x coord of each bin
-    x_bins = xgrid[0]
+    x_bin_edges = xgrid[0]
     # same for y coord
-    y_bins = ygrid[:, 0]
+    y_bin_edges = ygrid[:, 0]
     # assign each coord to a bin in one dimension
-    x_idxs = digitize(x_coords, x_bins)
-    y_idxs = digitize(y_coords, y_bins)
-    # NOTE: we expect model output to have shape (NUM_SAMPLES, n_y_pts, n_x_pts)
+    x_idxs = digitize(x_coords, x_bin_edges)
+    y_idxs = digitize(y_coords, y_bin_edges)
+    # NOTE: we expect model output to have shape (NUM_SAMPLES, n_y_bins, n_x_bins)
+    # where n_y_bins = len(y_bin_edges) - 1, and similar for n_x_bins.
     # so when we flatten, the entry at coordinate (i, j) gets mapped to
-    # (n_y_pts * j) + i
-    n_y_pts = len(y_bins)
-    return (n_y_pts * y_idxs) + x_idxs
+    # (n_x_bins * j) + i
+    n_x_bins = len(x_bin_edges) - 1
+    return (n_x_bins * y_idxs) + x_idxs
 
 
 def min_mass_containing_location(
@@ -132,7 +134,8 @@ def min_mass_containing_location_single(pmf, loc, xgrid, ygrid):
     # assign the true location to a coordinate bin
     # reshape loc to a (1, 2) array so the vectorized function
     # assign_to_bin_2d still works
-    loc_idx = assign_to_bin_2d(loc[np.newaxis, :], xgrid, ygrid)
+    loc = loc.reshape(1, 2)
+    loc_idx = assign_to_bin_2d(loc, xgrid, ygrid)
     # bin number for first interval containing location
     bin_idx = (argsorted == loc_idx).argmax()
     # distribution with values at indices above bin_idxs zeroed out
@@ -140,7 +143,7 @@ def min_mass_containing_location_single(pmf, loc, xgrid, ygrid):
     # [0, 1, 2, 3, ...],
     # [0, 1, 2, 3, ...]
     # ]
-    num_bins = xgrid.shape[0] * xgrid.shape[1]
+    num_bins = pmf.size
     sorted_maps = flattened[argsorted]
     s = np.where(np.arange(num_bins) > bin_idx, 0, sorted_maps).sum()
     return s
