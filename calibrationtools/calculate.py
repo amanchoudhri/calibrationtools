@@ -70,9 +70,8 @@ def assign_to_bin_2d(locations, xgrid, ygrid):
     # same for y coord
     y_bins = ygrid[:, 0]
     # assign each coord to a bin in one dimension
-    # note: subtract one to ignore leftmost bin (0)
-    x_idxs = np.digitize(x_coords, x_bins) - 1
-    y_idxs = np.digitize(y_coords, y_bins) - 1
+    x_idxs = digitize(x_coords, x_bins)
+    y_idxs = digitize(y_coords, y_bins)
     # NOTE: we expect model output to have shape (NUM_SAMPLES, n_y_pts, n_x_pts)
     # so when we flatten, the entry at coordinate (i, j) gets mapped to
     # (n_y_pts * j) + i
