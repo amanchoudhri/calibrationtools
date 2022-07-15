@@ -80,6 +80,20 @@ def assign_to_bin_2d(locations, xgrid, ygrid):
     n_x_bins = len(x_bin_edges) - 1
     return (n_x_bins * y_idxs) + x_idxs
 
+def _check_grid_shape(pmf_shape, xgrid, ygrid):
+    """
+    Check that xgrid and ygrid have the correct shapes for the shape
+    of the pmf.
+    """
+    n_y_bins, n_x_bins = pmf_shape
+    expected_grid_shape = (n_y_bins + 1, n_x_bins + 1)
+    if xgrid.shape != expected_grid_shape or ygrid.shape != expected_grid_shape:
+        raise ValueError(
+            f'Expected `xgrid` and `ygrid` to have shape {expected_grid_shape}, '
+            f'since each pmf has shape {pmf_shape}. '
+            f'Instead, encountered `xgrid` shape {xgrid.shape} and '
+            f'`ygrid` shape {ygrid.shape}'
+            )
 
 def min_mass_containing_location(
     maps: np.ndarray,
@@ -90,18 +104,10 @@ def min_mass_containing_location(
     # maps: (NUM_SAMPLES, n_y_bins, n_x_bins)
     # locations: (NUM_SAMPLES, 2)
     # coord_bins: (n_y_bins + 1, n_x_bins + 1, 2)  ( output of meshgrid then dstack ) 
-    # reshape maps to (NUM_SAMPLES, N_BINS)
     n_y_bins, n_x_bins = maps.shape[1:]
-    # there should be one more edge in each direction than
-    # the number of bins
-    expected_grid_shape = (n_y_bins + 1, n_x_bins + 1)
-    if xgrid.shape != expected_grid_shape or ygrid.shape != expected_grid_shape:
-        raise ValueError(
-            f'Expected `xgrid` and `ygrid` to have shape {expected_grid_shape}, '
-            f'since each pmf has shape {maps.shape[1:]}. '
-            f'Instead, encountered `xgrid` shape {xgrid.shape} and '
-            f'`ygrid` shape {ygrid.shape}'
-            )
+    # first verify that xgrid and ygrid have correct shapes
+    _check_grid_shape(maps[1:], xgrid, ygrid)
+    # reshape maps to (NUM_SAMPLES, N_BINS)
     num_samples = maps.shape[0]
     flattened_maps = maps.reshape((num_samples, -1))
     idx_matrix = flattened_maps.argsort(axis=1)[:, ::-1]
@@ -127,6 +133,8 @@ def min_mass_containing_location_single(pmf, loc, xgrid, ygrid):
     Find the min mass containing the true location for a single
     pmf. Used to map across args in `min_mass_containing_location_mp`.
     """
+    # check to make sure xgrid and ygrid have the correct shape
+    _check_grid_shape(pmf.shape, xgrid, ygrid)
     # flatten the pmf
     flattened = pmf.flatten()
     # argsort in descending order

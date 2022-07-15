@@ -155,7 +155,7 @@ class TestMinMassContainingLocation(unittest.TestCase):
 
     def test_invalid_grid_shape(self):
         """
-        Test that the function raises a ValueError if the shape
+        Test that the functions raise a ValueError if the shape
         of the grid arrays don't match the shape of the pmfs passed.
         Specifically, there should be one more gridpoint than bin
         in each coordinate direction.
@@ -166,6 +166,22 @@ class TestMinMassContainingLocation(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             min_mass_containing_location(
+                self.pmfs,
+                self.locations,
+                bad_xgrid,
+                bad_ygrid
+            )
+        
+        with self.assertRaises(ValueError):
+            min_mass_containing_location(
+                self.pmfs[0],
+                self.locations[0],
+                bad_xgrid,
+                bad_ygrid
+            )
+        
+        with self.assertRaises(ValueError):
+            min_mass_containing_location_mp(
                 self.pmfs,
                 self.locations,
                 bad_xgrid,
