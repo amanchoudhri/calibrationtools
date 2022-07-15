@@ -1,18 +1,9 @@
-"""Test calibration curve functions against known distributions."""
+"""Tests for functions in module calculate."""
 
-from collections import defaultdict, namedtuple
-import os
 import unittest
-
-from pathlib import Path
 
 import numpy as np
 from calibrationtools.calculate import assign_to_bin_2d, digitize, min_mass_containing_location, min_mass_containing_location_mp, min_mass_containing_location_single
-
-from calibrationtools.parallel import _calibration_step, calibration_from_steps
-
-from constants import ARENA_DIMS
-from util import observed_data, create_model_output
 
 
 class TestDigitize(unittest.TestCase):
