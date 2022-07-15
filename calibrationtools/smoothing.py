@@ -18,7 +18,7 @@ def gaussian_mixture(
     model_output: np.ndarray,
     std_values: np.ndarray,
     arena_dims: Union[Tuple[float, float], np.ndarray],
-    desired_resolution = 0.005,
+    desired_resolution,
     **kwargs
     ):
     for kwarg, value in kwargs.items():
@@ -101,11 +101,16 @@ def gaussian_blur(
     # and finally average the grids for each sample
     return blurred.mean(axis=1)
 
-def no_smoothing(model_output):
+def no_smoothing(model_output, **kwargs):
     """
     Apply no smoothing to the output. Here for consistency and to ensure
     that model_output can be interpreted as pmfs.
     """
+    # if the output only has two dimensions, add one at the start
+    # to represent the number of estimates per sample. this is just
+    # for convenience.
+    if model_output.ndim = 2:
+        model_output = model_output[None]
     err_prefix = (
         f'Expected output to be a valid probability '
         f'mass function since no smoothing method was provided to '
@@ -127,7 +132,8 @@ SMOOTHING_FUNCTIONS = {
 # a desired smoothing function
 NECCESARY_KWARGS = {
     'gaussian_mixture': ['std_values', 'desired_resolution', 'arena_dims'],
-    'gaussian_blur': ['std_values']
+    'gaussian_blur': ['std_values'],
+    'no_smoothing': []
 }
 
 N_CURVES_PER_FN = {
