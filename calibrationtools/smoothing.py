@@ -21,6 +21,10 @@ def gaussian_mixture(
     desired_resolution,
     **kwargs
     ):
+    """
+    Create a Gaussian mixture pmf where one spherical Gaussian of a certain variance
+    is placed at each location estimate provided.
+    """
     for kwarg, value in kwargs.items():
         logger.info(f'Ignoring unexpected keyword argument {kwarg} with value {value}.')
     # check that the input is a collection of x,y coordinates
@@ -64,6 +68,10 @@ def gaussian_blur(
     renormalize=True,
     **kwargs
     ) -> np.ndarray:
+    """
+    Convolve a Gaussian kernel over the input, applying a softmax transformation
+    before doing the blurring.
+    """
     for kwarg, value in kwargs.items():
         logger.info(f'Ignoring unexpected keyword argument {kwarg} with value {value}.')
     # check input shape. expected shape: (n_ests, n_x_pts, n_y_pts)
@@ -79,16 +87,7 @@ def gaussian_blur(
     # if 0 not in std_values:
     #     std_values = np.insert(std_values, 0, 0)
 
-    # renormalize the grids so each entry is in the range [-1, 1],
-    # since MUSE RSRP values seem to be able to reach magnitudes like 1e13,
-    # which the exp function inside softmax just blows up to infinity.
-    if renormalize:
-        model_output /= model_output.max(axis=(1, 2))[:, None, None]
-
-    # softmax the grids
-    axes_to_sum_over = range(2, model_output.ndim)  # sum over every axis but the first two
-    sum_per_grid = np.exp(model_output).sum(axis=tuple(axes_to_sum_over))    
-    softmaxed = np.exp(model_output) / sum_per_grid[:, :, None]
+    softmaxed = softmax(model_output, renormalize=renormalize)
 
     blurred = np.zeros((len(std_values), *softmaxed.shape))
 
@@ -119,6 +118,28 @@ def no_smoothing(model_output, **kwargs):
     check_valid_pmfs(model_output, prefix_str=err_prefix)
     return model_output
 
+def softmax(model_output, renormalize=True, **kwargs):
+    """
+    Apply a softmax to the model output, optionally renormalizing it.
+    """
+    # if the output only has two dimensions, add one at the start
+    # to represent the number of estimates per sample. this is just
+    # for convenience.
+    if model_output.ndim == 2:
+        model_output = model_output[None]
+    
+    # renormalize the grids so each entry is in the range [-1, 1],
+    # since MUSE RSRP values seem to be able to reach magnitudes like 1e13,
+    # which the exp function inside softmax just blows up to infinity.
+    if renormalize:
+        model_output /= model_output.max(axis=(1, 2))[:, None, None]
+
+    # softmax the grids
+    axes_to_sum_over = range(2, model_output.ndim)  # sum over every axis but the first two
+    sum_per_grid = np.exp(model_output).sum(axis=tuple(axes_to_sum_over))    
+    softmaxed = np.exp(model_output) / sum_per_grid[:, :, None]
+    return softmaxed
+
 
 SMOOTHING_FUNCTIONS = {
     'gaussian_mixture': gaussian_mixture,
@@ -133,11 +154,13 @@ SMOOTHING_FUNCTIONS = {
 NECCESARY_KWARGS = {
     'gaussian_mixture': ['std_values', 'desired_resolution', 'arena_dims'],
     'gaussian_blur': ['std_values'],
-    'no_smoothing': []
+    'no_smoothing': [],
+    'softmax': [],
 }
 
 N_CURVES_PER_FN = {
     'gaussian_mixture': 'std_values',
     'gaussian_blur': 'std_values',
-    'no_smoothing': 1
+    'no_smoothing': 1,
+    'softmax': 1,
 }
