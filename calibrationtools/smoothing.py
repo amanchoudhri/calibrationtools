@@ -78,6 +78,11 @@ def dynamic_spherical_gaussian(
         f'mean distance between point estimates and centroid: {mean_distance}'
         )
 
+    # lower bound the distance away from zero by
+    # some arbitrary value
+    if mean_distance == 0:
+        mean_distance = 1e-5
+
     # create grid of points at which to evaluate the pdf
     xgrid, ygrid = make_xy_grids(
         arena_dims,
