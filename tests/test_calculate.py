@@ -3,7 +3,10 @@
 import unittest
 
 import numpy as np
-from calibrationtools.calculate import assign_to_bin_2d, digitize, min_mass_containing_location, min_mass_containing_location_mp, min_mass_containing_location_single
+from calibrationtools.calculate import (
+    assign_to_bin_2d, digitize, min_mass_containing_location,
+    min_mass_containing_location_mp, min_mass_containing_location_single
+    )
 
 
 class TestDigitize(unittest.TestCase):
