@@ -33,14 +33,50 @@ class CalibrationAccumulator:
         n_calibration_bins: Optional[int] = 10,
         ):
         """
-        TODO: Add spec for config object.
+        Initialize a CalibrationAccumulator object, which is a helper class
+        to simplify the calculation of calibration in an online manner (iterating
+        through or asynchronously going through a dataset).
 
-        To disable smoothing for a specific output, the corresponding entry
-        in smoothing_specs_for_outputs should be None. Actually, you gotta use smoothing.
-        TODO: enable user to pass in inputs as they are, without smoothing.
+        Note: the parameter `smoothing_specs_for_outputs` has a very specific
+        schema, described as follows.
 
-        To disable smoothing for a specific output, pass in the identity function as a
-        custom smoothing method with smoothing_spec['n_curves_per_sample'] = 1.
+        The top level keywords should be names corresponding to various outputs
+        from the model. For example, MUSE outputs point estimates (`r_ests`) as well
+        as RSRP grids (`rsrp_grids`). 
+
+        For each model output type, the value should be another dictionary, which
+        I've typed as a `SmoothingSpec`. Essentially, the keys of this smoothing spec
+        should be strings referring to predefined smoothing functions or optionally a
+        custom function, which should be applied to the given input. To apply no
+        smoothing, simply pass an empty dictionary.
+
+        Lastly, the values associated with each `SmoothingFunction` should be one more
+        dictionary of the necessary kwargs for the smoothing function. This is mostly
+        relevant for predefined smoothing functions.
+
+        All in all, an example of a valid usage could be the following:
+        ```
+        ARENA_DIMS = (0.6, 0.4)  # dimensions of the arena, in meters
+        STD_VALUES = np.linspace(0.1, 10, 25)
+        FRACTIONS_OF_EST_VARIANCE = np.linspace(0.01, 3, 50)
+        PMF_RESOLUTION = 0.01  # desired resolution for the pmf, in meters
+        smoothing_specs = {
+            'r_ests': {
+                'gaussian_mixture': {
+                    'std_values': STD_VALUES,
+                    'desired_resolution': PMF_RESOLUTION
+                },
+                'dynamic_spherical_gaussian': {
+                    'fracs_of_est_variance': FRACTIONS_OF_EST_VARIANCE,
+                    'desired_resolution': PMF_RESOLUTION
+                }
+            },
+            'rsrp_grids': {
+                'softmax': {},
+                'gaussian_blur': {'std_values': STD_VALUES}
+            }
+        }
+        ```
         """
         self.output_names = list(smoothing_specs_for_outputs.keys())
         # todo: validate smoothing methods ?
