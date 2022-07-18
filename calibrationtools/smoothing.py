@@ -14,11 +14,67 @@ logger = logging.getLogger(__name__)
 class UnexpectedShapeError(Exception):
     """Raise when an input numpy array has a different shape than expected."""
 
+def dynamic_spherical_gaussian(
+    model_output: np.ndarray,
+    fracs_of_est_variance: np.ndarray,
+    arena_dims: Union[Tuple[float, float], np.ndarray],
+    desired_resolution: float,
+    **kwargs
+    ):
+    """
+    Place a spherical Gaussian at the mean of the given point estimates,
+    with the variance set as the expectation of the distance between
+    each point estimate and the mean estimate.
+    """
+    # check if fracs of est variance are negative
+    if (fracs_of_est_variance < 0).any():
+        raise ValueError(
+            'Values in array `fracs_of_est_variance` must be nonnegative!'
+            )
+    # check that the input is a collection of x,y coordinates
+    if model_output.shape[1] != 2 or model_output.ndim != 2:
+        raise UnexpectedShapeError(
+            f'Expected `model_output` to be an array of (x, y) coordinates ' \
+            f'and have shape (n_estimates, 2). Recieved shape: {model_output.shape}.'
+            )
+
+    mean = model_output.mean(axis=0)
+    logger.debug(f'mean estimate: {mean}, with shape {mean.shape}')
+    mean_distance = np.linalg.norm(model_output - mean[None, :]).mean()
+    logger.debug(
+        f'mean distance between point estimates and centroid: {mean_distance}'
+        )
+
+    # create grid of points at which to evaluate the pdf
+    xgrid, ygrid = make_xy_grids(
+        arena_dims,
+        resolution=desired_resolution,
+        return_center_pts=True
+        )
+    coord_grid = np.dstack((xgrid, ygrid))
+
+    # now assemble an array of probability mass functions by smoothing
+    # the location estimates with each std value
+    # since grids track the edgepoints and pmfs tracks the bins,
+    # pmfs should have one less value in each coordinate direction
+    pmfs = np.zeros((len(fracs_of_est_variance), *xgrid.shape))
+
+    for i, frac in enumerate(fracs_of_est_variance):
+        distr = scipy.stats.multivariate_normal(
+            mean=mean,
+            cov=(frac * mean_distance)
+        ).pdf(coord_grid)
+        distr /= distr.sum()
+        pmfs[i] = distr
+    
+    return pmfs
+
+
 def gaussian_mixture(
     model_output: np.ndarray,
     std_values: np.ndarray,
     arena_dims: Union[Tuple[float, float], np.ndarray],
-    desired_resolution,
+    desired_resolution: float,
     **kwargs
     ):
     """
@@ -35,15 +91,16 @@ def gaussian_mixture(
             )
     
     # create grid of points at which to evaluate the pdfs we define
-    xgrid, ygrid = make_xy_grids(arena_dims, resolution=desired_resolution)
+    xgrid, ygrid = make_xy_grids(
+        arena_dims,
+        resolution=desired_resolution,
+        return_center_pts=True
+        )
     coord_grid = np.dstack((xgrid, ygrid))
 
     # now assemble an array of probability mass functions by smoothing
     # the location estimates with each std value
-    # since grids track the edgepoints and pmfs tracks the bins,
-    # pmfs should have one less value in each coordinate direction
-    pmf_shape = np.array(xgrid.shape) - 1
-    pmfs = np.zeros((len(std_values), *pmf_shape))
+    pmfs = np.zeros((len(std_values), *xgrid.shape))
 
     for i, std in enumerate(std_values):
         for loc_estimate in model_output:
@@ -122,11 +179,11 @@ def softmax(model_output, renormalize=True, **kwargs):
     """
     Apply a softmax to the model output, optionally renormalizing it.
     """
-    # if the output only has two dimensions, add one at the start
-    # to represent the number of estimates per sample. this is just
-    # for convenience.
-    if model_output.ndim == 2:
-        model_output = model_output[None]
+    if model_output.ndim != 3:
+        raise UnexpectedShapeError(
+            f'Expected `model_output` to be a collection of grids, with three dimensions. ' \
+            f'Instead, recieved the following shape: {model_output.shape}.'
+            )
     
     # renormalize the grids so each entry is in the range [-1, 1],
     # since MUSE RSRP values seem to be able to reach magnitudes like 1e13,
