@@ -10,11 +10,15 @@ def make_xy_grids(
     arena_dims: Union[Tuple[float, float], np.ndarray],
     resolution: Optional[float] = None,
     shape: Optional[Tuple[float, float]] = None,
+    return_center_pts: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Given a two-tuple or np array storing the x and y dimensions and a desired
     grid resolution, return a tuple of arrays stooring the x and y coordinates
     at every point in the arena spaced apart by `desired_resolution`. 
+
+    Optionally, calculate those gridpoints and instead return the CENTER of each
+    bin based on the flag `return_center_pts`.
     """
     if resolution is None and shape is None:
         raise ValueError('One of `resolution`, `shape` is required!')
@@ -26,6 +30,20 @@ def make_xy_grids(
 
     get_coord_arrays = lambda dim_pts: np.linspace(0, dim_pts[0], dim_pts[1])
     xs, ys = map(get_coord_arrays, zip(arena_dims, pts_per_dim))
+    if return_center_pts:
+        # Given xgrid and ygrid, return a new array storing the positions
+        # of the centers of each bin defined by the grids.
+        def _get_center_pts(edge_pts):
+            """
+            Get the coordinates for the center of each bin in one axis.
+            """
+            # add half the successive differences to get avgs
+            # between edge_pts[i] and edge_pts[i+1]
+            return edge_pts[:-1] + np.diff(edge_pts)/2
+
+        xs = _get_center_pts(xs)
+        ys = _get_center_pts(ys)
+
     xgrid, ygrid = np.meshgrid(xs, ys)
     return (xgrid, ygrid)
 
