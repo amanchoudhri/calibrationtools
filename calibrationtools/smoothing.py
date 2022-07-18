@@ -109,7 +109,7 @@ def no_smoothing(model_output, **kwargs):
     # if the output only has two dimensions, add one at the start
     # to represent the number of estimates per sample. this is just
     # for convenience.
-    if model_output.ndim = 2:
+    if model_output.ndim == 2:
         model_output = model_output[None]
     err_prefix = (
         f'Expected output to be a valid probability '
