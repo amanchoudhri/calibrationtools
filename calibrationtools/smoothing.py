@@ -14,6 +14,39 @@ logger = logging.getLogger(__name__)
 class UnexpectedShapeError(Exception):
     """Raise when an input numpy array has a different shape than expected."""
 
+SMOOTHING_FUNCTIONS = {}
+
+# names of the necessary arguments for the smoothing functions
+# used by CalibrationAccumulator
+# to check whether the correct params have been passed for
+# a desired smoothing function
+NECCESARY_KWARGS = {
+    'gaussian_mixture': ['std_values', 'desired_resolution', 'arena_dims'],
+    'gaussian_blur': ['std_values'],
+    'dynamic_spherical_gaussian': ['fracs_of_est_variance'],
+}
+
+N_CURVES_PER_FN = {}
+
+def _smoothing_fn(n_curves_per_sample: Union[str, int]):
+    """
+    Decorator to register the number of calibration curves per sample
+    the given smoothing function returns. This is used to correctly
+    allocate space in the CalibrationAccumulator class.
+
+    In addition, register a smoothing function `f` in the dict
+    `SMOOTHING_FUNCTIONS` under the key `f.__name__` and set the
+    default value in `NECESSARY_KWARGS` for the function
+    as the empty list.
+    """
+    def wrapper(f):
+        SMOOTHING_FUNCTIONS[f.__name__] = f
+        NECCESARY_KWARGS.setdefault(f.__name__, [])
+        N_CURVES_PER_FN[f.__name__] = n_curves_per_sample
+        return f
+    return wrapper
+
+@_smoothing_fn('fracs_of_est_variance')
 def dynamic_spherical_gaussian(
     model_output: np.ndarray,
     fracs_of_est_variance: np.ndarray,
@@ -69,7 +102,7 @@ def dynamic_spherical_gaussian(
     
     return pmfs
 
-
+@_smoothing_fn('std_values')
 def gaussian_mixture(
     model_output: np.ndarray,
     std_values: np.ndarray,
@@ -119,6 +152,7 @@ def gaussian_mixture(
     pmfs /= sum_per_sigma_val
     return pmfs
 
+@_smoothing_fn('std_values')
 def gaussian_blur(
     model_output: np.ndarray,
     std_values: np.ndarray,
@@ -157,24 +191,28 @@ def gaussian_blur(
     # and finally average the grids for each sample
     return blurred.mean(axis=1)
 
-def no_smoothing(model_output, **kwargs):
-    """
-    Apply no smoothing to the output. Here for consistency and to ensure
-    that model_output can be interpreted as pmfs.
-    """
-    # if the output only has two dimensions, add one at the start
-    # to represent the number of estimates per sample. this is just
-    # for convenience.
-    if model_output.ndim == 2:
-        model_output = model_output[None]
-    err_prefix = (
-        f'Expected output to be a valid probability '
-        f'mass function since no smoothing method was provided to '
-        f'the CalibrationAccumulator constructor.'
-        )
-    check_valid_pmfs(model_output, prefix_str=err_prefix)
-    return model_output
+# ============================== TODO ==============================
+# @_smoothing_fn(1)
+# def no_smoothing(model_output, **kwargs):
+#     """
+#     Apply no smoothing to the output. Here for consistency and to ensure
+#     that model_output can be interpreted as pmfs.
+#     """
+#     # if the output only has two dimensions, add one at the start
+#     # to represent the number of estimates per sample. this is just
+#     # for convenience.
+#     if model_output.ndim == 2:
+#         model_output = model_output[None]
+#     err_prefix = (
+#         f'Expected output to be a valid probability '
+#         f'mass function since no smoothing method was provided to '
+#         f'the CalibrationAccumulator constructor.'
+#         )
+#     check_valid_pmfs(model_output, prefix_str=err_prefix)
+#     return model_output
+# ==================================================================
 
+@_smoothing_fn(1)
 def softmax(model_output, renormalize=True, **kwargs):
     """
     Apply a softmax to the model output, optionally renormalizing it.
@@ -195,29 +233,8 @@ def softmax(model_output, renormalize=True, **kwargs):
     axes_to_sum_over = range(2, model_output.ndim)  # sum over every axis but the first two
     sum_per_grid = np.exp(model_output).sum(axis=tuple(axes_to_sum_over))    
     softmaxed = np.exp(model_output) / sum_per_grid[:, :, None]
-    return softmaxed
-
-
-SMOOTHING_FUNCTIONS = {
-    'gaussian_mixture': gaussian_mixture,
-    'gaussian_blur': gaussian_blur,
-    'no_smoothing': no_smoothing,
-}
-
-# names of the necessary arguments for the smoothing functions
-# used by CalibrationAccumulator
-# to check whether the correct params have been passed for
-# a desired smoothing function
-NECCESARY_KWARGS = {
-    'gaussian_mixture': ['std_values', 'desired_resolution', 'arena_dims'],
-    'gaussian_blur': ['std_values'],
-    'no_smoothing': [],
-    'softmax': [],
-}
-
-N_CURVES_PER_FN = {
-    'gaussian_mixture': 'std_values',
-    'gaussian_blur': 'std_values',
-    'no_smoothing': 1,
-    'softmax': 1,
-}
+    
+    # average the grids to return one pmf
+    averaged = softmaxed.mean(axis=0)
+    # and add an extra dimension to match expected shape
+    return averaged[None]
