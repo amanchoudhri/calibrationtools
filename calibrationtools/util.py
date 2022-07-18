@@ -24,7 +24,10 @@ def make_xy_grids(
         raise ValueError('One of `resolution`, `shape` is required!')
 
     if not resolution:
-        pts_per_dim = np.array(shape)
+        # np.meshgrid returns a shape of (n_y_pts, n_x_pts)
+        # but expects (xs, ys) as arguments.
+        # reverse the shape so we match this convention.
+        pts_per_dim = np.array(shape)[::-1]
     else:
         pts_per_dim = (np.array(arena_dims) / resolution).astype(int)
 
