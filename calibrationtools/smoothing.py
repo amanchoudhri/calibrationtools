@@ -196,26 +196,24 @@ def gaussian_blur(
     # and finally average the grids for each sample
     return blurred.mean(axis=1)
 
-# ============================== TODO ==============================
-# @_smoothing_fn(1)
-# def no_smoothing(model_output, **kwargs):
-#     """
-#     Apply no smoothing to the output. Here for consistency and to ensure
-#     that model_output can be interpreted as pmfs.
-#     """
-#     # if the output only has two dimensions, add one at the start
-#     # to represent the number of estimates per sample. this is just
-#     # for convenience.
-#     if model_output.ndim == 2:
-#         model_output = model_output[None]
-#     err_prefix = (
-#         f'Expected output to be a valid probability '
-#         f'mass function since no smoothing method was provided to '
-#         f'the CalibrationAccumulator constructor.'
-#         )
-#     check_valid_pmfs(model_output, prefix_str=err_prefix)
-#     return model_output
-# ==================================================================
+@_smoothing_fn(1)
+def no_smoothing(model_output, **kwargs):
+    """
+    Apply no smoothing to the output. Here for consistency and to ensure
+    that model_output can be interpreted as pmfs.
+    """
+    # if the output only has two dimensions, add one at the start
+    # to represent the number of estimates per sample. this is just
+    # for convenience.
+    if model_output.ndim == 2:
+        model_output = model_output[None]
+    err_prefix = (
+        f'Expected output to be a valid probability '
+        f'mass function since no smoothing method was provided to '
+        f'the CalibrationAccumulator constructor.'
+        )
+    check_valid_pmfs(model_output, prefix_str=err_prefix)
+    return model_output
 
 @_smoothing_fn(1)
 def softmax(model_output, renormalize=True, **kwargs):
