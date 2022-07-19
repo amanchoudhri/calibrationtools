@@ -146,7 +146,7 @@ class TestCalibrationMethods(unittest.TestCase):
         cls.data = observed_data(cls.N_SAMPLES)
         cls.models = create_model_output()
 
-    def new_accumulator(self):
+    def new_accumulator(self) -> CalibrationAccumulator:
         smoothing_specs = {
             'uniform': { 'no_smoothing': {} },
             'std_normal': { 'no_smoothing': {} },
@@ -192,3 +192,49 @@ class TestCalibrationMethods(unittest.TestCase):
                         ca_mc_arr,
                         cal_step_arr
                     )
+
+    def test_overall_results(self):
+        """
+        Make sure the overall results make sense given known
+        distributions.
+        """
+        results = {}
+        for sample_name, samples in self.data.items():
+            ca = self.new_accumulator()
+            for s in samples:
+                ca.calculate_step(
+                    self.models, s
+                )
+            results[sample_name] = ca.calculate_curves_and_error()
+        
+        # make sure the correct model for each sample
+        # has the lowest error
+        for sample_name, results_for_sample in results.items():
+            # correct model error
+            correct_model_err = results_for_sample[sample_name]['no_smoothing']['abs_err']
+            for model_name, results_by_smoothing in results_for_sample.items():
+                err = results_by_smoothing['no_smoothing']['abs_err']
+                logging.debug(
+                    f'sample: {sample_name}, model: {model_name}, err: {err}'
+                )
+                if model_name != sample_name:
+                    self.assertLess(
+                        correct_model_err,
+                        err
+                    )
+        
+        # make sure the normal distributions are overconfident
+        # on the uniform data. this corresponds to a large negative
+        # signed error, which should be approximately the same as
+        # the negative absolute error.
+        get_errs = lambda model: results['uniform'][model]['no_smoothing']
+        spherical_normal = get_errs('std_normal')
+        skew_normal = get_errs('skew_normal')
+        logging.debug(f'spherical_normal on uniform: {spherical_normal}')
+        logging.debug(f'skew_normal on uniform: {skew_normal}')
+        self.assertAlmostEqual(
+            spherical_normal['abs_err'], -spherical_normal['signed_err']
+        )
+        self.assertAlmostEqual(
+            skew_normal['abs_err'], -skew_normal['signed_err']
+        )
