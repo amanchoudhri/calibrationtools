@@ -1,7 +1,7 @@
 import functools
 import logging
 
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import scipy.stats
@@ -11,8 +11,10 @@ from calibrationtools.util import check_valid_pmfs, make_xy_grids
 
 logger = logging.getLogger(__name__)
 
+
 class UnexpectedShapeError(Exception):
     """Raise when an input numpy array has a different shape than expected."""
+
 
 SMOOTHING_FUNCTIONS = {}
 
@@ -28,11 +30,45 @@ NECCESARY_KWARGS = {
 
 N_CURVES_PER_FN = {}
 
-def _smoothing_fn(n_curves_per_sample: Union[str, int]):
+
+def _check_shape(model_output, mode=None):
+    """
+    Verify that the provided model output array has the correct
+    shape and number of dimensions.
+    """
+    if not mode:
+        return
+    elif mode == 'locations':
+        # input should be a collection of x,y coordinates
+        if model_output.shape[1] != 2 or model_output.ndim != 2:
+            raise UnexpectedShapeError(
+                f'Expected `model_output` to be an array of (x,y) coordinates '
+                f'and have shape (n_estimates, 2). Recieved shape: '
+                f'{model_output.shape}.'
+                )
+    elif mode == 'grids':
+        # expected shape: (n_ests, n_x_pts, n_y_pts)
+        if model_output.ndim != 3:
+            raise UnexpectedShapeError(
+                f'Expected `model_output` to be a collection of grids, with '
+                f'three dimensions. Instead, recieved the following shape: '
+                f'{model_output.shape}.'
+                )
+    else:
+        raise ValueError('mode must be one of \'locations\', \'grids\'!')
+
+
+def _smoothing_fn(
+    n_curves_per_sample: Union[str, int],
+    input_type: Optional[str] = None
+):
     """
     Decorator to register the number of calibration curves per sample
     the given smoothing function returns. This is used to correctly
     allocate space in the CalibrationAccumulator class.
+
+    Optionally, also verify that the provided model output array has the
+    correct number of dimensions.
 
     In addition, register a smoothing function `f` in the dict
     `SMOOTHING_FUNCTIONS` under the key `f.__name__` and set the
@@ -40,20 +76,32 @@ def _smoothing_fn(n_curves_per_sample: Union[str, int]):
     as the empty list.
     """
     def wrapper(f):
-        SMOOTHING_FUNCTIONS[f.__name__] = f
-        NECCESARY_KWARGS.setdefault(f.__name__, [])
-        N_CURVES_PER_FN[f.__name__] = n_curves_per_sample
-        return f
+        smoothing_fn = f.__name__
+        # register the function into the necessary dictionaries
+        SMOOTHING_FUNCTIONS[smoothing_fn] = f
+        NECCESARY_KWARGS.setdefault(smoothing_fn, [])
+        N_CURVES_PER_FN[smoothing_fn] = n_curves_per_sample
+
+        @functools.wraps(f)
+        def decorator(*args, **kwargs):
+            # check the correct model output ndims
+            model_output = args[0]
+            _check_shape(model_output, input_type)
+            output = f(*args, **kwargs)
+            check_valid_pmfs(output)
+            return output
+        return decorator
     return wrapper
 
-@_smoothing_fn('fracs_of_est_variance')
+
+@_smoothing_fn('fracs_of_est_variance', 'locations')
 def dynamic_spherical_gaussian(
     model_output: np.ndarray,
     fracs_of_est_variance: np.ndarray,
     arena_dims: Union[Tuple[float, float], np.ndarray],
     desired_resolution: float,
     **kwargs
-    ):
+):
     """
     Place a spherical Gaussian at the mean of the given point estimates,
     with the variance set as the expectation of the distance between
@@ -63,12 +111,6 @@ def dynamic_spherical_gaussian(
     if (fracs_of_est_variance < 0).any():
         raise ValueError(
             'Values in array `fracs_of_est_variance` must be nonnegative!'
-            )
-    # check that the input is a collection of x,y coordinates
-    if model_output.shape[1] != 2 or model_output.ndim != 2:
-        raise UnexpectedShapeError(
-            f'Expected `model_output` to be an array of (x, y) coordinates ' \
-            f'and have shape (n_estimates, 2). Recieved shape: {model_output.shape}.'
             )
 
     mean = model_output.mean(axis=0)
@@ -104,36 +146,34 @@ def dynamic_spherical_gaussian(
         ).pdf(coord_grid)
         distr /= distr.sum()
         pmfs[i] = distr
-    
+
     return pmfs
 
-@_smoothing_fn('std_values')
+
+@_smoothing_fn('std_values', 'locations')
 def gaussian_mixture(
     model_output: np.ndarray,
     std_values: np.ndarray,
     arena_dims: Union[Tuple[float, float], np.ndarray],
     desired_resolution: float,
     **kwargs
-    ):
+):
     """
-    Create a Gaussian mixture pmf where one spherical Gaussian of a certain variance
-    is placed at each location estimate provided.
+    Create a Gaussian mixture pmf where one spherical Gaussian of a certain
+    variance is placed at each location estimate provided.
     """
     for kwarg, value in kwargs.items():
-        logger.info(f'Ignoring unexpected keyword argument {kwarg} with value {value}.')
-    # check that the input is a collection of x,y coordinates
-    if model_output.shape[1] != 2 or model_output.ndim != 2:
-        raise UnexpectedShapeError(
-            f'Expected `model_output` to be an array of (x, y) coordinates ' \
-            f'and have shape (n_estimates, 2). Recieved shape: {model_output.shape}.'
+        logger.info(
+            f'Ignoring unexpected keyword argument {kwarg} with value {value}.'
             )
-    
+
     # create grid of points at which to evaluate the pdfs we define
     xgrid, ygrid = make_xy_grids(
         arena_dims,
         resolution=desired_resolution,
         return_center_pts=True
         )
+
     coord_grid = np.dstack((xgrid, ygrid))
 
     # now assemble an array of probability mass functions by smoothing
@@ -146,7 +186,7 @@ def gaussian_mixture(
             # at the individual location estimate
             distr = scipy.stats.multivariate_normal(
                 mean=loc_estimate,
-                cov= (std ** 2)
+                cov=(std ** 2)
             )
             # and add it to the corresponding entry in pmfs
             pmfs[i] += distr.pdf(coord_grid)
@@ -157,31 +197,22 @@ def gaussian_mixture(
     pmfs /= sum_per_sigma_val
     return pmfs
 
-@_smoothing_fn('std_values')
+
+@_smoothing_fn('std_values', 'grids')
 def gaussian_blur(
     model_output: np.ndarray,
     std_values: np.ndarray,
     renormalize=True,
     **kwargs
-    ) -> np.ndarray:
+) -> np.ndarray:
     """
     Convolve a Gaussian kernel over the input, applying a softmax transformation
     before doing the blurring.
     """
     for kwarg, value in kwargs.items():
-        logger.info(f'Ignoring unexpected keyword argument {kwarg} with value {value}.')
-    # check input shape. expected shape: (n_ests, n_x_pts, n_y_pts)
-    if model_output.ndim != 3:
-        raise UnexpectedShapeError(
-            f'Expected `model_output` to be a collection of grids, with three dimensions. ' \
-            f'Instead, recieved the following shape: {model_output.shape}.'
+        logger.info(
+            f'Ignoring unexpected keyword argument {kwarg} with value {value}.'
             )
-    
-    # if the provided standard deviation values don't include 0 (no smoothing),
-    # add it to the list. this is crude but it allows us to use one `std_values`
-    # array for both smoothing methods.
-    # if 0 not in std_values:
-    #     std_values = np.insert(std_values, 0, 0)
 
     softmaxed = softmax(model_output, renormalize=renormalize)
 
@@ -196,6 +227,7 @@ def gaussian_blur(
     # and finally average the grids for each sample
     return blurred.mean(axis=1)
 
+
 @_smoothing_fn(1)
 def no_smoothing(model_output, **kwargs):
     """
@@ -208,36 +240,31 @@ def no_smoothing(model_output, **kwargs):
     if model_output.ndim == 2:
         model_output = model_output[None]
     err_prefix = (
-        f'Expected output to be a valid probability '
-        f'mass function since no smoothing method was provided to '
-        f'the CalibrationAccumulator constructor.'
+        'Expected output to be a valid probability '
+        'mass function since no smoothing method was provided to '
+        'the CalibrationAccumulator constructor.'
         )
     check_valid_pmfs(model_output, prefix_str=err_prefix)
     return model_output
 
-@_smoothing_fn(1)
+
+@_smoothing_fn(1, 'grids')
 def softmax(model_output, renormalize=True, **kwargs):
     """
     Apply a softmax to the model output, optionally renormalizing it.
     """
-    if model_output.ndim != 3:
-        raise UnexpectedShapeError(
-            f'Expected `model_output` to be a collection of grids, with three dimensions. ' \
-            f'Instead, recieved the following shape: {model_output.shape}.'
-            )
-    
     # renormalize the grids so each entry is in the range [-1, 1],
     # since MUSE RSRP values seem to be able to reach magnitudes like 1e13,
     # which the exp function inside softmax just blows up to infinity.
+    axes_to_sum_over = (1, 2)
     if renormalize:
-        model_output /= model_output.max(axis=(1, 2))[:, None, None]
+        model_output /= model_output.max(axis=axes_to_sum_over)[:, None, None]
 
     # softmax the grids
-    axes_to_sum_over = range(2, model_output.ndim)  # sum over every axis but the first two
-    sum_per_grid = np.exp(model_output).sum(axis=tuple(axes_to_sum_over))    
-    softmaxed = np.exp(model_output) / sum_per_grid[:, :, None]
-    
+    sum_per_grid = np.exp(model_output).sum(axis=axes_to_sum_over)
+    softmaxed = np.exp(model_output) / sum_per_grid[:, None, None]
+
     # average the grids to return one pmf
-    averaged = softmaxed.mean(axis=0)
     # and add an extra dimension to match expected shape
-    return averaged[None]
+    averaged = softmaxed.mean(axis=0)[None]
+    return averaged
