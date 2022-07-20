@@ -1,6 +1,7 @@
 import functools
 import logging
 import multiprocessing
+import pathlib
 
 from collections import defaultdict
 from typing import Any, Callable, Mapping, Optional, Tuple, Union
@@ -8,9 +9,12 @@ from typing import Any, Callable, Mapping, Optional, Tuple, Union
 import h5py
 import numpy as np
 
+from matplotlib import pyplot as plt
+
 from calibrationtools.calculate import digitize, min_mass_containing_location
 from calibrationtools.smoothing import SMOOTHING_FUNCTIONS, NECCESARY_KWARGS, N_CURVES_PER_FN
 from calibrationtools.util import check_valid_pmfs, make_xy_grids
+from calibrationtools.plotting import subplots, plot_calibration_curve, plot_err_curve
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +164,8 @@ class CalibrationAccumulator:
     def calculate_step(
         self,
         model_outputs: Mapping[str, np.ndarray],
-        true_location: np.ndarray
+        true_location: np.ndarray,
+        pmf_save_path: Optional[str] = None,
         ):
         """
         Perform one step of the calibration process on `model_output`.
@@ -207,11 +212,46 @@ class CalibrationAccumulator:
                     for sigma_idx, bin_idx in enumerate(bin_idxs):
                         counts_to_update[sigma_idx][bin_idx] += 1
                 
+                smoothed_output = smoothing_fn(model_output)
+                
+                # check to make sure that the output is a valid pmf
+                check_valid_pmfs(
+                    smoothed_output,
+                    f'Expected the output of smoothing method ' \
+                    f'{smoothing_method} to be a valid pmf.'
+                    )
+
+                # if a pmf save path was provided, save the outputs
+                # to that directory
+                if pmf_save_path is not None:
+                    outdir = pathlib.Path(pmf_save_path) / output_name
+                    outdir.mkdir(exist_ok=True, parents=True)
+                    outfile = outdir / str(smoothing_method)
+                    # rescale loc since we dont have x/y grid information
+                    n_y_pts, n_x_pts = smoothed_output[0].shape
+                    rescaled_loc = (true_location / self.arena_dims) * (n_x_pts, n_y_pts)
+                    logger.debug(f'rescaled location: {rescaled_loc}')
+                    if len(smoothed_output) > 1:
+                        fig, axs = subplots(len(smoothed_output))
+                        for i, (ax, pmf) in enumerate(zip(axs, smoothed_output)):
+                            ax.contourf(pmf)
+                            if smoothing_method in SMOOTHING_FUNCTIONS:
+                                params = self.smoothing_for_outputs[output_name][smoothing_method]
+                                kw = N_CURVES_PER_FN[smoothing_method]
+                                ax.set_title(f'varying param: {params[kw][i]}')
+                                ax.plot(*rescaled_loc, 'ro', label='true location')
+                        fig.tight_layout()
+                    else:
+                        _, ax = plt.subplots()
+                        ax.contourf(smoothed_output[0])
+                        ax.plot(*rescaled_loc, 'ro', label='true location')
+                    plt.savefig(outfile)
+
                 if self.use_mp:
                     self.pool.apply_async(
                         _calibration_step,
                         (
-                            smoothing_fn(model_output),
+                            smoothed_output,
                             true_location,
                             self.arena_dims
                         ),
@@ -222,7 +262,7 @@ class CalibrationAccumulator:
                     )
                 else:
                     bin_idxs = _calibration_step(
-                        smoothing_fn(model_output),
+                        smoothed_output,
                         true_location,
                         self.arena_dims,
                         n_calibration_bins=self.n_calibration_bins,
@@ -234,11 +274,13 @@ class CalibrationAccumulator:
         Calculate calibration curves and error from the collected
         results of all the calibration steps.
         """
+        # if we use multiprocessing, wait for the workers to finish
         if self.use_mp:
             self.pool.close()
             logger.info('Joining pool processes. Waiting for workers to finish...')
             self.pool.join()
 
+        # initialize a result dictionary
         self.results = {
             output_name: defaultdict(dict) for output_name in self.output_names
             }
@@ -262,10 +304,69 @@ class CalibrationAccumulator:
                 output_grp = cal_grp.create_group(output_name)
                 for smoothing_method, results in res_by_smoothing.items():
                     g = output_grp.create_group(smoothing_method)
+                    g.attrs['params'] = self.smoothing_for_outputs[output_name][smoothing_method]
                     for r_type, result in results.items():
                         g.create_dataset(r_type, data=result)
             logger.info(f'Successfully wrote results to file {h5_file}')
         return self.results
+    
+    def plot_results(self, img_directory: str):
+        """
+        Plot the results for all combinations in the given
+        directory with the filestructure:
+        ```
+        img_directory
+            |- output_method
+                |- smoothing_method
+                    |- 'curves.png'
+                    |- 'errs.png'
+                |- smoothing_method
+                    |- ...
+            |- ...
+        ```
+        """
+        # make sure the user calculated the results first
+        if not hasattr(self, 'results'):
+            raise Exception(
+                '`plot_results` called before results were calculated! '
+                'Please call `calculate_curves_and_error` first.'
+            )
+        basedir = pathlib.Path(img_directory)
+        # then iterate through them and save the files after plotting
+        for output, results_by_smoothing in self.results.items():
+            for smoothing_method, r in results_by_smoothing.items():
+                params = self.smoothing_for_outputs[output][smoothing_method]
+                # plot the calibration curves
+
+                # if a predefined smoothing method was
+                # passed, create more descriptive
+                # titles by accessing the params varied over
+                varied_params = None
+                if type(smoothing_method) == str:
+                    varied_param_name = N_CURVES_PER_FN[smoothing_method]
+                    if type(varied_param_name) == str:
+                        varied_params = params[varied_param_name]
+
+                curves = r['curves']
+                fig, axs = subplots(len(curves))
+                for i, (ax, curve) in enumerate(zip(axs, curves)):
+                    ax = plot_calibration_curve(curve)
+                    if varied_params:
+                        ax.set_title(f'{varied_param_name}: {varied_params[i]}')
+                fig.tight_layout()
+                
+                # save the figure
+                outdir = basedir / output / smoothing_method
+                outdir.mkdir(exist_ok=True, parents=True)
+
+                plt.savefig(outdir / 'curves.png')
+
+                # plot the errors
+                fig, axs = plot_err_curve(r['abs_err'], r['signed_err'])
+                # if only one error point is recieved, plot_err_curve
+                # returns None for fig.
+                if fig:
+                    plt.savefig(outdir / 'errs.png')
 
 
 def _calibration_step(
@@ -275,8 +376,8 @@ def _calibration_step(
     n_calibration_bins: int = 10
     ) -> np.ndarray:
     """
-    Actual calibration step calculation function. See `calibration_step`
-    for more details.
+    Actual calibration step calculation function. See
+    `CalibrationAccumulator.calibration_step` for more details.
     """
     # get our x and ygrids to match the shape of the pmfs
     # since the grids track the edge points, we should have
