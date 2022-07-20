@@ -14,7 +14,13 @@ from matplotlib.figure import Figure
 logger = logging.getLogger(__name__)
 
 
-def subplots(n_plots, scale_factor=4, sharex=True, sharey=True, **kwargs) -> Tuple[Figure, List[Axes]]:
+def subplots(
+    n_plots,
+    scale_factor=4,
+    sharex=True,
+    sharey=True,
+    **kwargs
+) -> Tuple[Figure, List[Axes]]:
     """
     Create nicely sized and laid-out subplots for a desired number of plots.
     """
@@ -41,10 +47,11 @@ def subplots(n_plots, scale_factor=4, sharex=True, sharey=True, **kwargs) -> Tup
         flattened_axes = [ax for ax_row in axs for ax in ax_row]
     return fig, flattened_axes
 
+
 def plot_calibration_curve(
     true_props,
-    ax = None
-    ) -> Axes:
+    ax=None
+) -> Axes:
     """
     Plot the given calibration curve, returning the x and y values
     along with the axis on which the curve was plotted.
@@ -57,6 +64,7 @@ def plot_calibration_curve(
     ax.set_xlabel('Probability assigned to region around mode')
     ax.set_ylabel('True proportion of samples in region')
     return ax
+
 
 def plot_err_curve(abs_err, signed_err, xlabels=None) -> Tuple[Figure, Tuple[Axes, Axes]]:
     if len(abs_err) != len(signed_err):
@@ -73,4 +81,3 @@ def plot_err_curve(abs_err, signed_err, xlabels=None) -> Tuple[Figure, Tuple[Axe
     ax1.scatter(xlabels, signed_err)
     ax1.set_ylabel('signed calibration error')
     return fig, (ax0, ax1)
-    

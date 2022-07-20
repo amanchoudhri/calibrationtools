@@ -1,22 +1,23 @@
 """Tests for the CalibrationAccumulator class."""
 
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 import logging
+import pathlib
 import unittest
 
 import numpy as np
 
-from calibrationtools.main import calibration_curve
 from calibrationtools.parallel import (
-    CalibrationAccumulator, _calibration_step, calibration_from_steps
+    CalibrationAccumulator, _calibration_step
     )
 
-from constants import ARENA_DIMS, xgrid, ygrid
+from constants import ARENA_DIMS
 from util import (
-    observed_data, create_model_output, spherical_normal_varying_std
+    observed_data, create_model_output
     )
 
 logging.basicConfig(level=logging.DEBUG)
+
 
 class TestInit(unittest.TestCase):
     """
@@ -59,7 +60,9 @@ class TestInit(unittest.TestCase):
         the param 'n_curves_per_sample' in the corresponding
         smoothing spec.
         """
-        custom_smoothing_fn = lambda x: x
+        def custom_smoothing_fn(x):
+            return x
+
         invalid_smoothing_specs = {
             'rsrp_grids': {
                 custom_smoothing_fn: {}
@@ -72,7 +75,7 @@ class TestInit(unittest.TestCase):
             )
 
     # =========================================================
-    
+
     def test_invalid_smoothing_method(self):
         """
         Test that a KeyError is raised if an invalid smoothing
@@ -94,7 +97,9 @@ class TestInit(unittest.TestCase):
         Test that the correct amount of space for the mass_counts
         arrays are allocated.
         """
-        custom_smoothing_fn = lambda x: x
+        def custom_smoothing_fn(x):
+            return x
+
         N_CURVES_FOR_CUSTOM_FN = 5
 
         GAUSSIAN_MIXTURE_STDS = np.linspace(0.1, 5, 10)
@@ -131,9 +136,11 @@ class TestInit(unittest.TestCase):
 
         CUSTOM_FN_SHAPE = (N_CURVES_FOR_CUSTOM_FN, N_CALIBRATION_BINS)
 
-        custom_shape_created = ca.mass_counts['rsrp_grids'][custom_smoothing_fn].shape
+        custom_shape_created = ca.mass_counts['rsrp_grids'][
+            custom_smoothing_fn].shape
 
         self.assertEqual(CUSTOM_FN_SHAPE, custom_shape_created)
+
 
 class TestCalibrationMethods(unittest.TestCase):
     """
@@ -148,9 +155,9 @@ class TestCalibrationMethods(unittest.TestCase):
 
     def new_accumulator(self) -> CalibrationAccumulator:
         smoothing_specs = {
-            'uniform': { 'no_smoothing': {} },
-            'std_normal': { 'no_smoothing': {} },
-            'skew_normal': { 'no_smoothing': {} }
+            'uniform': {'no_smoothing': {}},
+            'std_normal': {'no_smoothing': {}},
+            'skew_normal': {'no_smoothing': {}}
         }
         return CalibrationAccumulator(
             ARENA_DIMS, smoothing_specs, use_multiprocessing=False
@@ -206,12 +213,19 @@ class TestCalibrationMethods(unittest.TestCase):
                     self.models, s
                 )
             results[sample_name] = ca.calculate_curves_and_error()
-        
+            # save the results to a local directory for local debugging
+            outdir = (
+                pathlib.Path(__file__).parent /
+                'accumulator_results' /
+                f'sample_{sample_name}'
+                )
+            ca.plot_results(outdir)
         # make sure the correct model for each sample
         # has the lowest error
         for sample_name, results_for_sample in results.items():
             # correct model error
-            correct_model_err = results_for_sample[sample_name]['no_smoothing']['abs_err']
+            correct_results = results_for_sample[sample_name]['no_smoothing']
+            correct_model_err = correct_results['abs_err']
             for model_name, results_by_smoothing in results_for_sample.items():
                 err = results_by_smoothing['no_smoothing']['abs_err']
                 logging.debug(
@@ -222,12 +236,14 @@ class TestCalibrationMethods(unittest.TestCase):
                         correct_model_err,
                         err
                     )
-        
+
         # make sure the normal distributions are overconfident
         # on the uniform data. this corresponds to a large negative
         # signed error, which should be approximately the same as
         # the negative absolute error.
-        get_errs = lambda model: results['uniform'][model]['no_smoothing']
+        def get_errs(model):
+            return results['uniform'][model]['no_smoothing']
+
         spherical_normal = get_errs('std_normal')
         skew_normal = get_errs('skew_normal')
         logging.debug(f'spherical_normal on uniform: {spherical_normal}')

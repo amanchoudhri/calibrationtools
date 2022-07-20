@@ -1,11 +1,10 @@
 import logging
 import multiprocessing as mp
 
-from typing import Tuple
-
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
 
 def digitize(locations, bin_edges):
     """
@@ -21,7 +20,7 @@ def digitize(locations, bin_edges):
     max_dx = diffs.max()
     # define a new bin array where the highest bin
     # is bins[-1] + tol, with our tolerance as
-    # 0.01 * max_dx. 
+    # 0.01 * max_dx.
     # say values less than this are in the highest bin.
     # this is to catch floating point errors that push values
     # greater than bin_edges[-1], while still
@@ -51,11 +50,12 @@ def digitize(locations, bin_edges):
     highest_bin_idx = num_bins - 1
     return bin_idxs.clip(0, highest_bin_idx)
 
+
 def assign_to_bin_2d(locations, xgrid, ygrid):
     """
     Return an array of indices of the 2d bins to which each input in
     `locations` corresponds.
-    
+
     The indices correspond to the "flattened" version of the grid. In essence,
     for a point in bin (i, j), the output is i + (n_x_bins * j), where n_x_bins
     is the number of grid bins in the x direction--essentially the number
@@ -80,6 +80,7 @@ def assign_to_bin_2d(locations, xgrid, ygrid):
     n_x_bins = len(x_bin_edges) - 1
     return (n_x_bins * y_idxs) + x_idxs
 
+
 def _check_grid_shape(pmf_shape, xgrid, ygrid):
     """
     Check that xgrid and ygrid have the correct shapes for the shape
@@ -95,15 +96,16 @@ def _check_grid_shape(pmf_shape, xgrid, ygrid):
             f'`ygrid` shape {ygrid.shape}'
             )
 
+
 def min_mass_containing_location(
     maps: np.ndarray,
     locations: np.ndarray,
     xgrid: np.ndarray,
     ygrid: np.ndarray
-    ):
+):
     # maps: (NUM_SAMPLES, n_y_bins, n_x_bins)
     # locations: (NUM_SAMPLES, 2)
-    # coord_bins: (n_y_bins + 1, n_x_bins + 1, 2)  ( output of meshgrid then dstack ) 
+    # coord_bins: (n_y_bins + 1, n_x_bins + 1, 2)  ( output of meshgrid then dstack )
     n_y_bins, n_x_bins = maps.shape[1:]
     # first verify that xgrid and ygrid have correct shapes
     _check_grid_shape(maps.shape[1:], xgrid, ygrid)
@@ -180,7 +182,5 @@ def min_mass_containing_location_mp(
     with mp.Pool(processes=mp.cpu_count()) as pool:
         arg_iterator = arg_iter()
         masses = pool.starmap(min_mass_containing_location_single, arg_iterator)
-    
+
     return np.array(masses)
-
-

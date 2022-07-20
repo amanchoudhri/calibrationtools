@@ -12,7 +12,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from calibrationtools.calculate import digitize, min_mass_containing_location
-from calibrationtools.smoothing import SMOOTHING_FUNCTIONS, NECCESARY_KWARGS, N_CURVES_PER_FN
+from calibrationtools.smoothing import (
+    SMOOTHING_FUNCTIONS,
+    NECCESARY_KWARGS,
+    N_CURVES_PER_FN
+    )
 from calibrationtools.util import check_valid_pmfs, make_xy_grids
 from calibrationtools.plotting import subplots, plot_calibration_curve, plot_err_curve
 
@@ -21,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 SmoothingFunction = Union[str, Callable]
 SmoothingSpec = Mapping[SmoothingFunction, Mapping[str, Any]]
+
 
 class CalibrationAccumulator:
     """
@@ -35,7 +40,7 @@ class CalibrationAccumulator:
         smoothing_specs_for_outputs: Mapping[str, SmoothingSpec],
         use_multiprocessing: bool = True,
         n_calibration_bins: Optional[int] = 10,
-        ):
+    ):
         """
         Initialize a CalibrationAccumulator object, which is a helper class
         to simplify the calculation of calibration in an online manner (iterating
@@ -46,7 +51,7 @@ class CalibrationAccumulator:
 
         The top level keywords should be names corresponding to various outputs
         from the model. For example, MUSE outputs point estimates (`r_ests`) as well
-        as RSRP grids (`rsrp_grids`). 
+        as RSRP grids (`rsrp_grids`).
 
         For each model output type, the value should be another dictionary, which
         I've typed as a `SmoothingSpec`. Essentially, the keys of this smoothing spec
@@ -150,9 +155,9 @@ class CalibrationAccumulator:
                     # will create per sample
                     if 'n_curves_per_sample' not in params:
                         raise ValueError(
-                            f'Parameter dictionary for custom smoothing method ' \
-                            f'must containg key `n_curves_per_sample`. ' \
-                            f'For smoothing method {smoothing_method}, '\
+                            f'Parameter dictionary for custom smoothing method '
+                            f'must containg key `n_curves_per_sample`. '
+                            f'For smoothing method {smoothing_method}, '
                             f'instead encountered param dict: {params}'
                             )
                     mass_counts_arr = np.zeros(
@@ -166,7 +171,7 @@ class CalibrationAccumulator:
         model_outputs: Mapping[str, np.ndarray],
         true_location: np.ndarray,
         pmf_save_path: Optional[str] = None,
-        ):
+    ):
         """
         Perform one step of the calibration process on `model_output`.
         Optionally, smooth `model_output` with the smoothing methods
@@ -178,7 +183,7 @@ class CalibrationAccumulator:
                 to numpy arrays representing the corresponding model output.
             true_location: Array contianing the true location of the audio sample, in
                 centimeters. Expected shape: (1, 2).
-            
+
         Essentially, this function takes in the output from a model,
         optionally smoothing it to make it a valid pmf. Then, it
         calculates $m$, the probability assigned to the smallest region
@@ -211,13 +216,13 @@ class CalibrationAccumulator:
                     counts_to_update = self.mass_counts[output_name][smoothing_method]
                     for sigma_idx, bin_idx in enumerate(bin_idxs):
                         counts_to_update[sigma_idx][bin_idx] += 1
-                
+
                 smoothed_output = smoothing_fn(model_output)
 
                 # check to make sure that the output is a valid pmf
                 check_valid_pmfs(
                     smoothed_output,
-                    f'Expected the output of smoothing method ' \
+                    f'Expected the output of smoothing method '
                     f'{smoothing_method} to be a valid pmf.'
                     )
 
@@ -236,7 +241,8 @@ class CalibrationAccumulator:
                         for i, (ax, pmf) in enumerate(zip(axs, smoothed_output)):
                             ax.contourf(pmf)
                             if smoothing_method in SMOOTHING_FUNCTIONS:
-                                params = self.smoothing_for_outputs[output_name][smoothing_method]
+                                params = self.smoothing_for_outputs[output_name][
+                                    smoothing_method]
                                 kw = N_CURVES_PER_FN[smoothing_method]
                                 ax.set_title(f'varying param: {params[kw][i]}')
                                 ax.plot(*rescaled_loc, 'ro', label='true location')
@@ -258,7 +264,7 @@ class CalibrationAccumulator:
                         {
                             'n_calibration_bins': self.n_calibration_bins
                         },
-                        callback = _update_mass_counts
+                        callback=_update_mass_counts
                     )
                 else:
                     bin_idxs = _calibration_step(
@@ -292,8 +298,8 @@ class CalibrationAccumulator:
                     )
                 result_subdict = self.results[output_name][smoothing_method]
                 result_subdict['curves'] = curves
-                result_subdict['abs_err'] = abs_err 
-                result_subdict['signed_err'] = signed_err 
+                result_subdict['abs_err'] = abs_err
+                result_subdict['signed_err'] = signed_err
 
         logger.info('Successfully calculated results.')
 
@@ -313,7 +319,7 @@ class CalibrationAccumulator:
                         g.create_dataset(r_type, data=result)
             logger.info(f'Successfully wrote results to file {h5_file}')
         return self.results
-    
+
     def plot_results(self, img_directory: str):
         """
         Plot the results for all combinations in the given
@@ -358,7 +364,7 @@ class CalibrationAccumulator:
                     if varied_params is not None:
                         ax.set_title(f'{varied_param_name}: {varied_params[i]}')
                 fig.tight_layout()
-                
+
                 # save the figure
                 outdir = basedir / output / smoothing_method
                 outdir.mkdir(exist_ok=True, parents=True)
@@ -367,7 +373,11 @@ class CalibrationAccumulator:
                 plt.close()
 
                 # plot the errors
-                fig, axs = plot_err_curve(r['abs_err'], r['signed_err'], xlabels=varied_params)
+                fig, axs = plot_err_curve(
+                    r['abs_err'],
+                    r['signed_err'],
+                    xlabels=varied_params
+                    )
                 # if only one error point is recieved, plot_err_curve
                 # returns None for fig.
                 if fig:
@@ -381,7 +391,7 @@ def _calibration_step(
     true_location,
     arena_dims,
     n_calibration_bins: int = 10
-    ) -> np.ndarray:
+) -> np.ndarray:
     """
     Actual calibration step calculation function. See
     `CalibrationAccumulator.calibration_step` for more details.
@@ -415,11 +425,12 @@ def _calibration_step(
 
     return bin_idxs
 
+
 def calibration_from_steps(cal_step_bulk: np.array):
     """
     Calculate calibration curves and error from the collected
     results of `calibration_step`.
-    
+
     Args:
         cal_step_bulk: Results from `calibration_step`, should have
             shape (n_sigma_values, n_bins).
@@ -475,12 +486,13 @@ def calibration_step(
         were smoothed with variance sigma_values[i].
 
     Essentially, we place a spherical Gaussian with variance $sigma^2$ at
-    each location estimate in `model_output`, then sum and average over all location 
+    each location estimate in `model_output`, then sum and average over all location
     estimates for the given sample to create a new probability mass function.
-    
-    Then, we calculate $m$, the probability assigned to the smallest region in the xy 
+
+    Then, we calculate $m$, the probability assigned to the smallest region in the xy
     plane containing the true location, where these regions are defined by
-    progressively taking the location bins to which the model assigns the highest probability mass.
+    progressively taking the location bins to which the model assigns the highest
+    probability mass.
 
     We repeat this process for each value of sigma in `sigma_vals`, and return
     the resulting array.
@@ -513,8 +525,8 @@ def calibration_step(
     # if it's provided but is neither a string nor a callable, throw an error
     else:
         raise ValueError(
-            f'Expected smoothing_method to be either None, a callable, ' \
-            f'or a string in {allowed_method_strs}. Instead, recieved object ' \
+            f'Expected smoothing_method to be either None, a callable, '
+            f'or a string in {allowed_method_strs}. Instead, recieved object '
             f'{smoothing_method} of type {type(smoothing_method)}.'
             )
 
