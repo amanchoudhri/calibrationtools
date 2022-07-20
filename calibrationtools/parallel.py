@@ -213,7 +213,7 @@ class CalibrationAccumulator:
                         counts_to_update[sigma_idx][bin_idx] += 1
                 
                 smoothed_output = smoothing_fn(model_output)
-                
+
                 # check to make sure that the output is a valid pmf
                 check_valid_pmfs(
                     smoothed_output,
@@ -304,7 +304,11 @@ class CalibrationAccumulator:
                 output_grp = cal_grp.create_group(output_name)
                 for smoothing_method, results in res_by_smoothing.items():
                     g = output_grp.create_group(smoothing_method)
-                    g.attrs['params'] = self.smoothing_for_outputs[output_name][smoothing_method]
+                    # save the parameters to the attrs of g
+                    params = self.smoothing_for_outputs[output_name][smoothing_method]
+                    for kwarg, value in params.items():
+                        g.attrs[kwarg] = value
+                    # and write the actual result data as well
                     for r_type, result in results.items():
                         g.create_dataset(r_type, data=result)
             logger.info(f'Successfully wrote results to file {h5_file}')
@@ -350,8 +354,8 @@ class CalibrationAccumulator:
                 curves = r['curves']
                 fig, axs = subplots(len(curves))
                 for i, (ax, curve) in enumerate(zip(axs, curves)):
-                    ax = plot_calibration_curve(curve)
-                    if varied_params:
+                    plot_calibration_curve(curve, ax=ax)
+                    if varied_params is not None:
                         ax.set_title(f'{varied_param_name}: {varied_params[i]}')
                 fig.tight_layout()
                 
@@ -360,13 +364,16 @@ class CalibrationAccumulator:
                 outdir.mkdir(exist_ok=True, parents=True)
 
                 plt.savefig(outdir / 'curves.png')
+                plt.close()
 
                 # plot the errors
-                fig, axs = plot_err_curve(r['abs_err'], r['signed_err'])
+                fig, axs = plot_err_curve(r['abs_err'], r['signed_err'], xlabels=varied_params)
                 # if only one error point is recieved, plot_err_curve
                 # returns None for fig.
                 if fig:
+                    fig.tight_layout()
                     plt.savefig(outdir / 'errs.png')
+                plt.close()
 
 
 def _calibration_step(
