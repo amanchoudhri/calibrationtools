@@ -81,7 +81,7 @@ def dynamic_spherical_gaussian(
     # lower bound the distance away from zero by
     # some arbitrary value
     if mean_distance == 0:
-        mean_distance = 1e-5
+        mean_distance = 1e-3
 
     # create grid of points at which to evaluate the pdf
     xgrid, ygrid = make_xy_grids(
