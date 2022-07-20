@@ -125,6 +125,8 @@ def min_mass_containing_location(
     condition = x_idx > bin_idxs[:, np.newaxis]
     sorted_maps = np.take_along_axis(flattened_maps, idx_matrix, axis=1)
     s = np.where(condition, 0, sorted_maps).sum(axis=1)
+    if (s < 0).any():
+        logger.warning(f'negative min masses containing locations found: {s}')
     # clip values to remove any floating point errors
     # where the sum is greater than 1
     return s.clip(0, 1)
