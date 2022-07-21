@@ -114,10 +114,13 @@ def dynamic_spherical_gaussian(
             )
 
     mean = model_output.mean(axis=0)
-    logger.debug(f'mean estimate: {mean}, with shape {mean.shape}')
+    logger.debug(
+        f'in smoothing method `dynamic_spherical_gaussian`, encountered '
+        f'mean estimate: {mean}, with shape {mean.shape}'
+        )
     mean_distance = np.linalg.norm(model_output - mean[None, :]).mean()
     logger.debug(
-        f'mean distance between point estimates and centroid: {mean_distance}'
+        f'average distance between point estimates and centroid: {mean_distance}'
         )
 
     # lower bound the distance away from zero by
