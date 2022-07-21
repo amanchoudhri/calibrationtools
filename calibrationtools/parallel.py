@@ -166,6 +166,9 @@ class CalibrationAccumulator:
 
                 self.mass_counts[output_type][smoothing_method] = mass_counts_arr
 
+        logger.info('Successfully initialized CalibrationAccumulator.')
+        logger.debug(f'Smoothing specs for CalibrationAccumulator: {self.smoothing_for_outputs}')
+
     def calculate_step(
         self,
         model_outputs: Mapping[str, np.ndarray],
@@ -232,9 +235,11 @@ class CalibrationAccumulator:
                     outdir = pathlib.Path(pmf_save_path) / output_name
                     outdir.mkdir(exist_ok=True, parents=True)
                     outfile = outdir / str(smoothing_method)
+                    logger.info(f'Saving smoothed pmfs to path {outfile}')
                     # rescale loc since we dont have x/y grid information
                     n_y_pts, n_x_pts = smoothed_output[0].shape
                     rescaled_loc = (true_location / self.arena_dims) * (n_x_pts, n_y_pts)
+                    rescaled_loc = rescaled_loc.squeeze() # reduce to a (2,) vector for pyplot
                     logger.debug(f'rescaled location: {rescaled_loc}')
                     if len(smoothed_output) > 1:
                         fig, axs = subplots(len(smoothed_output))
