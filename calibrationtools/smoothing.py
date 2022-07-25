@@ -104,8 +104,8 @@ def dynamic_spherical_gaussian(
 ):
     """
     Place a spherical Gaussian at the mean of the given point estimates,
-    with the variance set as the expectation of the distance between
-    each point estimate and the mean estimate.
+    with the standard deviation set as the mean of the distance between
+    each point estimate and their centroid.
     """
     # check if fracs of est variance are negative
     if (fracs_of_est_variance < 0).any():
@@ -123,10 +123,12 @@ def dynamic_spherical_gaussian(
         f'average distance between point estimates and centroid: {mean_distance}'
         )
 
-    # lower bound the distance away from zero by
-    # some arbitrary value
-    if mean_distance == 0:
-        mean_distance = 1e-3
+    # make sure that the smallest distance we'll use as our
+    # std is greater than the resolution of the grid as a heuristic
+    # to make sure that all the mass doesn't fall between gridpoints
+    # when we evaluate the pdf
+    lowest_frac = fracs_of_est_variance.min()
+    mean_distance = max(lowest_frac * (mean_distance ** 2), desired_resolution)
 
     # create grid of points at which to evaluate the pdf
     xgrid, ygrid = make_xy_grids(
@@ -145,7 +147,7 @@ def dynamic_spherical_gaussian(
     for i, frac in enumerate(fracs_of_est_variance):
         distr = scipy.stats.multivariate_normal(
             mean=mean,
-            cov=(frac * mean_distance)
+            cov=(frac * (mean_distance ** 2))
         ).pdf(coord_grid)
         distr /= distr.sum()
         pmfs[i] = distr
