@@ -6,6 +6,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import scipy.stats
 import scipy.ndimage
+import scipy.special
 
 from calibrationtools.util import check_valid_pmfs, make_xy_grids
 
@@ -203,34 +204,52 @@ def gaussian_mixture(
     return pmfs
 
 
-@_smoothing_fn('std_values', 'grids')
-def gaussian_blur(
+@_smoothing_fn('temperatures', 'grids')
+def softmax_with_temp(
     model_output: np.ndarray,
-    std_values: np.ndarray,
-    renormalize=True,
-    **kwargs
+    temperatures: np.ndarray,
+    **kwargs,
 ) -> np.ndarray:
     """
-    Convolve a Gaussian kernel over the input, applying a softmax transformation
-    before doing the blurring.
+    Apply a softmax to a temperature parameter times the average
+    of the provided grids.
     """
-    for kwarg, value in kwargs.items():
-        logger.info(
-            f'Ignoring unexpected keyword argument {kwarg} with value {value}.'
-            )
+    averaged = model_output.mean(axis=0)
+    # multiply grid by each value of temp
+    with_temp = averaged * temperatures.reshape(-1, 1, 1)
+    # apply softmax to each grid
+    softmaxed = scipy.special.softmax(with_temp, axis=(1, 2))
+    return softmaxed
 
-    softmaxed = softmax(model_output, renormalize=renormalize)
 
-    blurred = np.zeros((len(std_values), *softmaxed.shape))
+# @_smoothing_fn('std_values', 'grids')
+# def gaussian_blur(
+#     model_output: np.ndarray,
+#     std_values: np.ndarray,
+#     renormalize=True,
+#     **kwargs
+# ) -> np.ndarray:
+#     """
+#     Convolve a Gaussian kernel over the input, applying a softmax transformation
+#     before doing the blurring.
+#     """
+#     for kwarg, value in kwargs.items():
+#         logger.info(
+#             f'Ignoring unexpected keyword argument {kwarg} with value {value}.'
+#             )
 
-    for i, std in enumerate(std_values):
-        blurred[i] = scipy.ndimage.gaussian_filter(
-            softmaxed,
-            sigma=[0, std, std]  # blur only within grids, not between them
-        )
+#     softmaxed = softmax(model_output, renormalize=renormalize)
 
-    # and finally average the grids for each sample
-    return blurred.mean(axis=1)
+#     blurred = np.zeros((len(std_values), *softmaxed.shape))
+
+#     for i, std in enumerate(std_values):
+#         blurred[i] = scipy.ndimage.gaussian_filter(
+#             softmaxed,
+#             sigma=[0, std, std]  # blur only within grids, not between them
+#         )
+
+#     # and finally average the grids for each sample
+#     return blurred.mean(axis=1)
 
 
 @_smoothing_fn(1)
@@ -253,23 +272,23 @@ def no_smoothing(model_output, **kwargs):
     return model_output
 
 
-@_smoothing_fn(1, 'grids')
-def softmax(model_output, renormalize=True, **kwargs):
-    """
-    Apply a softmax to the model output, optionally renormalizing it.
-    """
-    # renormalize the grids so each entry is in the range [-1, 1],
-    # since MUSE RSRP values seem to be able to reach magnitudes like 1e13,
-    # which the exp function inside softmax just blows up to infinity.
-    axes_to_sum_over = (1, 2)
-    if renormalize:
-        model_output /= model_output.max(axis=axes_to_sum_over)[:, None, None]
+# @_smoothing_fn(1, 'grids')
+# def softmax(model_output, renormalize=True, **kwargs):
+#     """
+#     Apply a softmax to the model output, optionally renormalizing it.
+#     """
+#     # renormalize the grids so each entry is in the range [-1, 1],
+#     # since MUSE RSRP values seem to be able to reach magnitudes like 1e13,
+#     # which the exp function inside softmax just blows up to infinity.
+#     axes_to_sum_over = (1, 2)
+#     if renormalize:
+#         model_output /= model_output.max(axis=axes_to_sum_over)[:, None, None]
 
-    # softmax the grids
-    sum_per_grid = np.exp(model_output).sum(axis=axes_to_sum_over)
-    softmaxed = np.exp(model_output) / sum_per_grid[:, None, None]
+#     # softmax the grids
+#     sum_per_grid = np.exp(model_output).sum(axis=axes_to_sum_over)
+#     softmaxed = np.exp(model_output) / sum_per_grid[:, None, None]
 
-    # average the grids to return one pmf
-    # and add an extra dimension to match expected shape
-    averaged = softmaxed.mean(axis=0)[None]
-    return averaged
+#     # average the grids to return one pmf
+#     # and add an extra dimension to match expected shape
+#     averaged = softmaxed.mean(axis=0)[None]
+#     return averaged
