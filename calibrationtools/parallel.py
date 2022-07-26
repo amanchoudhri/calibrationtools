@@ -89,9 +89,7 @@ class CalibrationAccumulator:
         """
         if use_multiprocessing:
             self.pool = multiprocessing.Pool()
-            self.logger = multiprocessing.log_to_stderr()
-        else:
-            self.logger = logging.getLogger('CalibrationAccumulator')
+
         self.output_names = list(smoothing_specs_for_outputs.keys())
         # todo: validate smoothing methods ?
         # todo: build smoothing functions here ?
@@ -99,7 +97,7 @@ class CalibrationAccumulator:
         self.n_calibration_bins = n_calibration_bins
 
         self.arena_dims = arena_dims
-        self.logger.debug(f'arena_dims recieved: {self.arena_dims}')
+        logger.debug(f'arena_dims recieved: {self.arena_dims}')
         self.use_mp = use_multiprocessing
 
         # initialize the internal mass counts tracking arrays
@@ -150,7 +148,7 @@ class CalibrationAccumulator:
                     mass_counts_arr = np.zeros((n_curves, n_calibration_bins))
 
                 elif callable(smoothing_method):
-                    self.logger.debug(
+                    logger.debug(
                         f'smoothing method {smoothing_method} recieved '
                         f'with params {params}'
                         )
@@ -174,8 +172,8 @@ class CalibrationAccumulator:
                     f'and smoothing `{smoothing_method}`'
                     )
 
-        self.logger.info('Successfully initialized CalibrationAccumulator.')
-        self.logger.debug(f'Smoothing specs for CalibrationAccumulator: {self.smoothing_for_outputs}')
+        logger.info('Successfully initialized CalibrationAccumulator.')
+        logger.debug(f'Smoothing specs for CalibrationAccumulator: {self.smoothing_for_outputs}')
 
     def calculate_step(
         self,
@@ -243,21 +241,25 @@ class CalibrationAccumulator:
                     outdir = pathlib.Path(pmf_save_path) / output_name
                     outdir.mkdir(exist_ok=True, parents=True)
                     outfile = outdir / str(smoothing_method)
-                    self.logger.info(f'Saving smoothed pmfs to path {outfile}')
+                    logger.info(f'Saving smoothed pmfs to path {outfile}')
                     # rescale loc since we dont have x/y grid information
                     n_y_pts, n_x_pts = smoothed_output[0].shape
                     rescaled_loc = (true_location / self.arena_dims) * (n_x_pts, n_y_pts)
-                    rescaled_loc = rescaled_loc.squeeze() # reduce to a (2,) vector for pyplot
-                    self.logger.debug(f'rescaled location: {rescaled_loc}')
+                    rescaled_loc = rescaled_loc.squeeze()  # reduce to a (2,) vector for pyplot
+                    logger.debug(f'rescaled location: {rescaled_loc}')
                     if len(smoothed_output) > 1:
                         fig, axs = subplots(len(smoothed_output))
                         for i, (ax, pmf) in enumerate(zip(axs, smoothed_output)):
                             ax.contourf(pmf)
+                            # if the smoothing method was predefined and there are
+                            # multiple outputs, add a more descriptive title
+                            # by accessing the param that determines the number
+                            # of curves (`std_values`, for example)
                             if smoothing_method in SMOOTHING_FUNCTIONS:
                                 params = self.smoothing_for_outputs[output_name][
                                     smoothing_method]
                                 kw = N_CURVES_PER_FN[smoothing_method]
-                                ax.set_title(f'varying param: {params[kw][i]}')
+                                ax.set_title(f'{kw}: {params[kw][i]}')
                                 ax.plot(*rescaled_loc, 'ro', label='true location')
                         fig.tight_layout()
                     else:
@@ -277,7 +279,8 @@ class CalibrationAccumulator:
                         {
                             'n_calibration_bins': self.n_calibration_bins
                         },
-                        callback=_update_mass_counts
+                        callback=_update_mass_counts,
+                        error_callback=lambda e: logger.error(e)
                     )
                 else:
                     bin_idxs = _calibration_step(
@@ -288,7 +291,11 @@ class CalibrationAccumulator:
                     )
                     _update_mass_counts(bin_idxs)
 
-    def calculate_curves_and_error(self, h5_file: Optional[h5py.File] = None):
+    def calculate_curves_and_error(
+        self,
+        h5_path: Optional[str] = None,
+        h5_file: Optional[h5py.File] = None
+        ):
         """
         Calculate calibration curves and error from the collected
         results of all the calibration steps.
@@ -296,14 +303,15 @@ class CalibrationAccumulator:
         # if we use multiprocessing, wait for the workers to finish
         if self.use_mp:
             self.pool.close()
-            self.logger.info('Joining pool processes. Waiting for workers to finish...')
+            logger.info('Joining pool processes. Waiting for workers to finish...')
             self.pool.join()
 
         # initialize a result dictionary
         self.results = {
             output_name: defaultdict(dict) for output_name in self.output_names
             }
-        self.logger.info('Calculating results.')
+
+        logger.info('Calculating results.')
         for output_name, mass_counts_by_smoothing in self.mass_counts.items():
             for smoothing_method, mass_counts_arr in mass_counts_by_smoothing.items():
                 curves, abs_err, signed_err = calibration_from_steps(
@@ -314,10 +322,12 @@ class CalibrationAccumulator:
                 result_subdict['abs_err'] = abs_err
                 result_subdict['signed_err'] = signed_err
 
-        self.logger.info('Successfully calculated results.')
+        logger.info('Successfully calculated results.')
+        if h5_path:
+            h5_file = h5py.File(h5_path)
 
         if h5_file:
-            self.logger.info(f'Writing results to h5 file {h5_file}.')
+            logger.info(f'Writing results to h5 file {h5_file}.')
             cal_grp = h5_file.create_group('calibration')
             for output_name, res_by_smoothing in self.results.items():
                 output_grp = cal_grp.create_group(output_name)
@@ -330,7 +340,12 @@ class CalibrationAccumulator:
                     # and write the actual result data as well
                     for r_type, result in results.items():
                         g.create_dataset(r_type, data=result)
-            self.logger.info(f'Successfully wrote results to file {h5_file}')
+            logger.info(f'Successfully wrote results to file {h5_file}')
+
+        if h5_path:
+            # make sure to close the h5 file if we created it
+            h5_file.close()
+
         return self.results
 
     def plot_results(self, img_directory: str):
