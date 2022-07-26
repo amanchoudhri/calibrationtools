@@ -153,17 +153,17 @@ class TestCalibrationMethods(unittest.TestCase):
         cls.data = observed_data(cls.N_SAMPLES)
         cls.models = create_model_output()
 
-    def new_accumulator(self) -> CalibrationAccumulator:
+    def new_accumulator(self, mp=False) -> CalibrationAccumulator:
         smoothing_specs = {
             'uniform': {'no_smoothing': {}},
             'std_normal': {'no_smoothing': {}},
             'skew_normal': {'no_smoothing': {}}
         }
         return CalibrationAccumulator(
-            ARENA_DIMS, smoothing_specs, use_multiprocessing=False
+            ARENA_DIMS, smoothing_specs, use_multiprocessing=mp
         )
 
-    def test_calculate_step_consistency(self):
+    def is_calculate_step_consistent(self, ca):
         """
         Test that the calculate_step method of CalibrationAccumulator
         is consistent with _calculate_step, which is tested thoroughly
@@ -200,7 +200,7 @@ class TestCalibrationMethods(unittest.TestCase):
                         cal_step_arr
                     )
 
-    def test_overall_results(self):
+    def overall_results_sensible(self, ca):
         """
         Make sure the overall results make sense given known
         distributions.
@@ -254,3 +254,17 @@ class TestCalibrationMethods(unittest.TestCase):
         self.assertAlmostEqual(
             skew_normal['abs_err'], -skew_normal['signed_err']
         )
+
+    def test_no_mp(self):
+        ca = self.new_accumulator()
+        self.is_calculate_step_consistent(ca)
+        self.overall_results_sensible(ca)
+
+
+    def test_mp(self):
+        """
+        Apply the same tests, but with multiprocessing enabled.
+        """
+        ca = self.new_accumulator(mp=True)
+        self.is_calculate_step_consistent(ca)
+        self.overall_results_sensible(ca)
