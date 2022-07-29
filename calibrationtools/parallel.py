@@ -323,28 +323,14 @@ class CalibrationAccumulator:
                 result_subdict['signed_err'] = signed_err
 
         logger.info('Successfully calculated results.')
-        if h5_path:
-            h5_file = h5py.File(h5_path)
 
-        if h5_file:
-            logger.info(f'Writing results to h5 file {h5_file}.')
-            cal_grp = h5_file.create_group('calibration')
-            for output_name, res_by_smoothing in self.results.items():
-                output_grp = cal_grp.create_group(output_name)
-                for smoothing_method, results in res_by_smoothing.items():
-                    g = output_grp.create_group(smoothing_method)
-                    # save the parameters to the attrs of g
-                    params = self.smoothing_for_outputs[output_name][smoothing_method]
-                    for kwarg, value in params.items():
-                        g.attrs[kwarg] = value
-                    # and write the actual result data as well
-                    for r_type, result in results.items():
-                        g.create_dataset(r_type, data=result)
-            logger.info(f'Successfully wrote results to file {h5_file}')
-
-        if h5_path:
-            # make sure to close the h5 file if we created it
-            h5_file.close()
+        if h5_path or h5_file:
+            self.write_results(
+                self.results,
+                self.smoothing_for_outputs,
+                h5_path=h5_path,
+                h5_file=h5_file
+                )
 
         return self.results
 
@@ -412,6 +398,34 @@ class CalibrationAccumulator:
                     fig.tight_layout()
                     plt.savefig(outdir / 'errs.png')
                 plt.close()
+
+    @staticmethod
+    def write_results(results, smoothing_spec, h5_path=None, h5_file=None):
+        """
+        Write the provided results to an h5 file.
+        """
+        if h5_path:
+            h5_file = h5py.File(h5_path)
+
+        if h5_file:
+            logger.info(f'Writing results to h5 file {h5_file}.')
+            cal_grp = h5_file.create_group('calibration')
+            for output_name, res_by_smoothing in results.items():
+                output_grp = cal_grp.create_group(output_name)
+                for smoothing_method, results in res_by_smoothing.items():
+                    g = output_grp.create_group(smoothing_method)
+                    # save the parameters to the attrs of g
+                    params = smoothing_spec[output_name][smoothing_method]
+                    for kwarg, value in params.items():
+                        g.attrs[kwarg] = value
+                    # and write the actual result data as well
+                    for r_type, result in results.items():
+                        g.create_dataset(r_type, data=result)
+            logger.info(f'Successfully wrote results to file {h5_file}')
+
+        if h5_path:
+            # make sure to close the h5 file if we created it
+            h5_file.close()
 
 
 def _calibration_step(
