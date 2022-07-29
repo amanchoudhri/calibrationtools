@@ -18,6 +18,7 @@ from calibrationtools.smoothing import (
     )
 from calibrationtools.plotting import subplots, plot_calibration_curve, plot_err_curve
 from calibrationtools.parallel import _calibration_step, calibration_from_steps
+from calibrationtools.util import check_valid_pmfs, make_xy_grids
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,10 @@ class CalibrationAccumulator:
         We repeat this process as many times as is defined by the parameters in
         self.smoothing_for_outputs.
         """
+        # if we should save the outputs, create a dict storing
+        # the smoothed pmfs by output_name and smoothing_method
+        smoothed_outputs = defaultdict(dict)
+
         for output_name in self.output_names:
             model_output = model_outputs[output_name]
             smoothing_specs = self.smoothing_for_outputs[output_name]
@@ -234,38 +239,9 @@ class CalibrationAccumulator:
                     f'{smoothing_method} to be a valid pmf.'
                     )
 
-                # if a pmf save path was provided, save the outputs
-                # to that directory
-                if pmf_save_path is not None:
-                    outdir = pathlib.Path(pmf_save_path) / output_name
-                    outdir.mkdir(exist_ok=True, parents=True)
-                    outfile = outdir / str(smoothing_method)
-                    logger.info(f'Saving smoothed pmfs to path {outfile}')
-                    # rescale loc since we dont have x/y grid information
-                    n_y_pts, n_x_pts = smoothed_output[0].shape
-                    rescaled_loc = (true_location / self.arena_dims) * (n_x_pts, n_y_pts)
-                    rescaled_loc = rescaled_loc.squeeze()  # reduce to a (2,) vector for pyplot
-                    logger.debug(f'rescaled location: {rescaled_loc}')
-                    if len(smoothed_output) > 1:
-                        fig, axs = subplots(len(smoothed_output))
-                        for i, (ax, pmf) in enumerate(zip(axs, smoothed_output)):
-                            ax.contourf(pmf)
-                            # if the smoothing method was predefined and there are
-                            # multiple outputs, add a more descriptive title
-                            # by accessing the param that determines the number
-                            # of curves (`std_values`, for example)
-                            if smoothing_method in SMOOTHING_FUNCTIONS:
-                                params = self.smoothing_for_outputs[output_name][
-                                    smoothing_method]
-                                kw = N_CURVES_PER_FN[smoothing_method]
-                                ax.set_title(f'{kw}: {params[kw][i]}')
-                                ax.plot(*rescaled_loc, 'ro', label='true location')
-                        fig.tight_layout()
-                    else:
-                        _, ax = plt.subplots()
-                        ax.contourf(smoothed_output[0])
-                        ax.plot(*rescaled_loc, 'ro', label='true location')
-                    plt.savefig(outfile)
+                # temporarily store the pmfs in case they are to be
+                # plotted and saved to a file
+                smoothed_outputs[output_name][smoothing_method] = smoothed_output
 
                 if self.use_mp:
                     self.pool.apply_async(
@@ -289,7 +265,58 @@ class CalibrationAccumulator:
                         n_calibration_bins=self.n_calibration_bins,
                     )
                     _update_mass_counts(bin_idxs)
-    
+
+        if pmf_save_path is not None:
+            self._save_pmfs(
+                pmf_save_path,
+                smoothed_outputs,
+                true_location
+            )
+
+    def _save_pmfs(
+        self,
+        save_path,
+        smoothed_outputs,
+        true_location
+    ):
+        """
+        Plot and save the provided pmfs.
+        """
+        for output_name, subdict in smoothed_outputs.items():
+            for smoothing_method, outputs in subdict.items():
+                outdir = pathlib.Path(save_path) / output_name
+                outdir.mkdir(exist_ok=True, parents=True)
+                outfile = outdir / str(smoothing_method)
+                logger.info(f'Saving smoothed pmfs to path {outfile}')
+
+                xgrid, ygrid = make_xy_grids(
+                    self.arena_dims,
+                    shape=outputs[0].shape,
+                    return_center_pts=True
+                    )
+
+                # if there are multiple grids, create multiple subplots
+                if len(outputs) > 1:
+                    fig, axs = subplots(len(outputs))
+                    for i, (ax, pmf) in enumerate(zip(axs, outputs)):
+                        ax.contourf(xgrid, ygrid, pmf)
+                        # if the smoothing method was predefined and there are
+                        # multiple outputs, add a more descriptive title
+                        # by accessing the param that determines the number
+                        # of curves (`std_values`, for example)
+                        if smoothing_method in SMOOTHING_FUNCTIONS:
+                            params = self.smoothing_for_outputs[output_name][
+                                smoothing_method]
+                            kw = N_CURVES_PER_FN[smoothing_method]
+                            ax.set_title(f'{kw}: {params[kw][i]}')
+                    fig.tight_layout()
+                else:
+                    _, ax = plt.subplots()
+                    ax.contourf(xgrid, ygrid, outputs[0])
+
+                ax.plot(*true_location, 'ro', label='true location')
+                plt.savefig(outfile)
+
     def calculate_curves_and_error(
         self,
         h5_path: Optional[str] = None,
