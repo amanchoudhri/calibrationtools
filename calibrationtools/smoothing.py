@@ -115,21 +115,18 @@ def dynamic_spherical_gaussian(
             )
 
     mean = model_output.mean(axis=0)
-    logger.debug(
-        f'in smoothing method `dynamic_spherical_gaussian`, encountered '
-        f'mean estimate: {mean}, with shape {mean.shape}'
-        )
     mean_distance = np.linalg.norm(model_output - mean[None, :]).mean()
-    logger.debug(
-        f'average distance between point estimates and centroid: {mean_distance}'
-        )
 
     # make sure that the smallest distance we'll use as our
     # std is greater than the resolution of the grid as a heuristic
     # to make sure that all the mass doesn't fall between gridpoints
     # when we evaluate the pdf
     lowest_frac = fracs_of_est_variance.min()
-    mean_distance = max(lowest_frac * (mean_distance ** 2), desired_resolution)
+    tolerance = 2
+    mean_distance = max(
+        lowest_frac * (mean_distance ** 2),
+        tolerance * desired_resolution
+        )
 
     # create grid of points at which to evaluate the pdf
     xgrid, ygrid = make_xy_grids(
@@ -150,7 +147,12 @@ def dynamic_spherical_gaussian(
             mean=mean,
             cov=(frac * (mean_distance ** 2))
         ).pdf(coord_grid)
-        distr /= distr.sum()
+        try:
+            np.seterr(divide='raise')
+            distr /= distr.sum()
+        except FloatingPointError as e:
+            logger.error(f'current distribution: {distr}')
+            logger.error(e)
         pmfs[i] = distr
 
     return pmfs
@@ -179,6 +181,15 @@ def gaussian_mixture(
         resolution=desired_resolution,
         return_center_pts=True
         )
+
+    smallest_std = std_values.min()
+    tol = 2
+    if smallest_std < tol * desired_resolution:
+        raise ValueError(
+            'Param `std_values` should be far larger than the resolution of '
+            f'the grid! Grid resolution: {desired_resolution}, smallest std '
+            f'requested: {smallest_std}.'
+            )
 
     coord_grid = np.dstack((xgrid, ygrid))
 
@@ -214,12 +225,13 @@ def softmax_with_temp(
     Apply a softmax to a temperature parameter times the average
     of the provided grids.
     """
-    averaged = model_output.mean(axis=0)
-    # multiply grid by each value of temp
-    with_temp = averaged * temperatures.reshape(-1, 1, 1)
+    # multiply each pmf by each value of temp
+    # with_temp shape: (n_pmfs, n_temps, n_x_pts, n_y_pts)
+    with_temp = model_output[:, None] * temperatures.reshape(-1, 1, 1)
     # apply softmax to each grid
-    softmaxed = scipy.special.softmax(with_temp, axis=(1, 2))
-    return softmaxed
+    softmaxed = scipy.special.softmax(with_temp, axis=(-2, -1))
+    averaged = softmaxed.mean(axis=0)
+    return averaged
 
 
 # @_smoothing_fn('std_values', 'grids')
