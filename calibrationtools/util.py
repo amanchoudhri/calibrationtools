@@ -20,6 +20,35 @@ def make_xy_grids(
 
     Optionally, calculate those gridpoints and instead return the CENTER of each
     bin based on the flag `return_center_pts`.
+
+    Note that this function expects shape in the format (n_y_pts, n_x_pts).
+
+    Examples:
+    ```
+    >>> make_xy_grids((4, 3), shape=(2, 3))
+    (
+        array([
+            [0., 2., 4.],
+            [0., 2., 4.]
+        ]),
+        array([
+            [0., 0., 0.],
+            [3., 3., 3.]
+        ])
+    )
+    >>> make_xy_grids((4, 3), shape=(1, 2), return_center_pts=True)
+    (
+        array([
+            [0.66666667, 2.        , 3.33333333],
+            [0.66666667, 2.        , 3.33333333]
+        ]),
+        array([
+            [0.75, 0.75, 0.75],
+            [2.25, 2.25, 2.25]
+        ])
+    )
+    ```
+
     """
     if resolution is None and shape is None:
         raise ValueError('One of `resolution`, `shape` is required!')
@@ -32,25 +61,31 @@ def make_xy_grids(
     else:
         pts_per_dim = (np.array(arena_dims) / resolution).astype(int)
 
-    def get_coord_arrays(dim_pts):
-        return np.linspace(0, dim_pts[0], dim_pts[1])
+    def _coord_array(dim_pts):
+        """
+        Get an array of coordinates along one axis.
 
-    xs, ys = map(get_coord_arrays, zip(arena_dims, pts_per_dim))
-    if return_center_pts:
-        # Given xgrid and ygrid, return a new array storing the positions
-        # of the centers of each bin defined by the grids.
-        def _get_center_pts(edge_pts):
-            """
-            Get the coordinates for the center of each bin in one axis.
-            """
+        Expects `dim_pts` to be a tuple (dim, n_pts), where `dim`
+        is the length of the grid along the current axis, and `n_pts`
+        is the desired number of points to be placed along the axis.
+        """
+        dimension, n_pts = dim_pts
+        # if the user requested to return the CENTER of each bin,
+        # create one extra gridpoint in each direction
+        # then return the average of each successive bin
+        if return_center_pts:
+            edge_coords = np.linspace(0, dimension, n_pts + 1)
             # add half the successive differences to get avgs
             # between edge_pts[i] and edge_pts[i+1]
-            return edge_pts[:-1] + np.diff(edge_pts)/2
+            coords = edge_coords[:-1] + (np.diff(edge_coords) / 2)
+        else:
+            coords = np.linspace(0, dimension, n_pts)
+        return coords
 
-        xs = _get_center_pts(xs)
-        ys = _get_center_pts(ys)
+    xs, ys = map(_coord_array, zip(arena_dims, pts_per_dim))
 
     xgrid, ygrid = np.meshgrid(xs, ys)
+
     return (xgrid, ygrid)
 
 
@@ -96,6 +131,7 @@ def check_valid_pmfs(pmfs: np.ndarray, prefix_str=None):
         raise ValueError(
             prefix_str + f' However, the distributions at the following indices '
             f'do not sum to 1: {distrs_not_sum_to_one}. Their sums: {bad_sums}.'
+            f'Distributions: {pmfs[distrs_not_sum_to_one]}'
         )
     elems_positive = pmfs >= 0
     if not elems_positive.all():
