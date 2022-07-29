@@ -7,9 +7,8 @@ import unittest
 
 import numpy as np
 
-from calibrationtools.parallel import (
-    CalibrationAccumulator, _calibration_step
-    )
+from calibrationtools.accumulator import CalibrationAccumulator
+from calibrationtools.parallel import _calibration_step
 
 from constants import ARENA_DIMS
 from util import (
@@ -259,7 +258,6 @@ class TestCalibrationMethods(unittest.TestCase):
         ca = self.new_accumulator()
         self.is_calculate_step_consistent(ca)
         self.overall_results_sensible(ca)
-
 
     def test_mp(self):
         """
